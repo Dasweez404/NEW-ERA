@@ -321,15 +321,17 @@ const AFF_TXT={enemies:'ennemis',all:'personnages (alliés compris)',allies:'all
 async function lineFx(u,cells,col){faceTo(u,cells[cells.length-1]);for(const ce of cells){burst(cellPos(ce.c,ce.r,.5),col,5,{speed:1.2,up:.8,size:.1,life:.4,g:2});await sleep(45)}}
 async function zoneFx(cells,col,c,r){ringFx(cellPos(c,r),col,1.2+cells.length*.05,.5);for(const ce of cells)burst(cellPos(ce.c,ce.r,.3),col,4,{speed:1.5,up:2.5,size:.11,life:.5});shakeCam(.18);await sleep(250)}
 const ECOL=e=>(e&&FXCOL[e])||0xffd27a;
+const SHAPETXT={cross:'en losange',x:'en X (diagonales)',ring:'en anneau',plus:'en croix',h:'en rangée',v:'en colonne',col:'sur toute une colonne',row:'sur toute une rangée',col3:'sur 3 colonnes',row3:'sur 3 rangées',comb:'sur 3 colonnes en peigne (une sur deux)',rowcomb:'sur 3 rangées en peigne (une sur deux)'};
+const shapeTxt=(shape,rad)=>shape&&SHAPETXT[shape]?(shape==='cross'||shape==='x'||shape==='ring'||shape==='plus'||shape==='h'||shape==='v'?SHAPETXT[shape]+' (rayon '+rad+')':SHAPETXT[shape]):(2*rad+1)+'×'+(2*rad+1);
 const fxList=(dm,e)=>[dm?`−${dm} PV`:'',e?effTxt(e):''].filter(Boolean).join(' et ')||'effet';
 Object.assign(B,{
- line:(n,len,dm=0,e=null,o={})=>({n,t:'line',len,diag:!!o.diag,aff:o.aff||'enemies',x:`Ligne de ${len} cases${o.diag?' (8 directions)':''} : ${fxList(dm,e)} à tous les ${AFF_TXT[o.aff||'enemies']} alignés.`,
+ line:(n,len,dm=0,e=null,o={})=>({n,t:'line',len,w:o.w||0,diag:!!o.diag,aff:o.aff||'enemies',x:`Ligne de ${len} cases${o.w?' de large ('+(2*o.w+1)+')':''}${o.diag?' (8 directions)':''} : ${fxList(dm,e)} à tous les ${AFF_TXT[o.aff||'enemies']} alignés.`,
    run:async(u,tg)=>{await lineFx(u,tg.cells,ECOL(e));for(const x of tg.units){if(dm)await dmg(x,dm,u);if(e&&x.alive)await addEff(x,e,u)}}}),
  zone:(n,range,rad,e=null,dm=0,o={})=>({n,t:'zone',range,rad,shape:o.shape||'square',aff:o.aff||'enemies',ff:!!o.ff,
-   x:`Zone ${o.shape==='cross'?'en croix (rayon '+rad+')':(2*rad+1)+'×'+(2*rad+1)} centrée à ≤${range} cases : ${fxList(dm,e)} à tous les personnages touchés${o.ff?' (alliés compris !)':' ennemis'}.`,
+   x:`Zone ${shapeTxt(o.shape,rad)} centrée ${range>=99?'n\'importe où':'à ≤'+range+' cases'} : ${fxList(dm,e)} à tous les personnages touchés${o.ff?' (alliés compris !)':' ennemis'}.`,
    run:async(u,tg)=>{await zoneFx(tg.cells,ECOL(e),tg.c,tg.r);for(const x of tg.units){if(dm)await dmg(x,dm,u);if(e&&x.alive)await addEff(x,e,u)}}}),
  hazard:(n,range,rad,kind,ttl,o={})=>({n,t:'zone',range,rad,shape:o.shape||'square',aff:'enemies',empty:true,hazard:true,
-   x:`Crée une zone ${ZK[kind].n} ${o.shape==='cross'?'en croix':(2*rad+1)+'×'+(2*rad+1)} (centre à ≤${range} cases) pendant ${ttl} manches : ${ZK[kind].heal?'soigne les alliés':effTxt(ZK[kind].eff)+(ZK[kind].dmg?' et −'+ZK[kind].dmg+' PV':'')+' aux ennemis'} qui y entrent ou y restent.`,
+   x:`Crée une zone ${ZK[kind].n} ${shapeTxt(o.shape,rad)} (centre ${range>=99?'n\'importe où':'à ≤'+range+' cases'}) pendant ${ttl} manches : ${ZK[kind].heal?'soigne les alliés':effTxt(ZK[kind].eff)+(ZK[kind].dmg?' et −'+ZK[kind].dmg+' PV':'')+' aux ennemis'} qui y entrent ou y restent.`,
    run:async(u,tg)=>{await zoneFx(tg.cells,ZK[kind].col,tg.c,tg.r);await addZone(u,tg.cells,kind,ttl)}}),
  multi:(n,k,e=null,dm=0)=>({n,t:'multi',k,aff:'enemies',x:`Jusqu'à ${k} ennemis à portée (choisis-les un à un) : ${fxList(dm,e)}.`,
    run:async(u,l)=>{for(const x of l){faceTo(u,x);if(dm)await dmg(x,dm,u);if(e&&x.alive)await addEff(x,e,u)}}}),
@@ -351,6 +353,39 @@ Object.assign(B,{
    for(let i=0;i<k&&t.alive;i++){const r=await combat(u,t);if(r!=='hit')break;addBuff(u,'atk',1,'self',u);pop(u,`Combo ×${i+1}`,'#ffd27a')}},o),
  finisher:(n,base,o={})=>TGT(n,`Cible ${o.far?'à ≤'+o.far+' cases':'à portée'} : −${base} PV, +1 PV par capacité déjà lancée par l'équipe cette manche (chaîne).`,async(u,t)=>{const bonus=G.chain[u.team];pop(t,`Chaîne ×${bonus}`,'#ffd27a');await dmg(t,base+bonus,u)},o),
  link:n=>SELF(n,'Amorce la chaîne : +2 à la chaîne d\'équipe (les coups de grâce infligent plus).',async u=>{G.chain[u.team]+=1;pop(u,'⛓ +2','#ffd27a')})
+});
+
+/* ===== ciblage varié : étoile, rebonds, cibles automatiques ===== */
+const nearestEnemy=u=>alive(1-u.team).slice().sort((a,b)=>cheb(u,a)-cheb(u,b));
+const groupBy=(u,key)=>{const m=new Map();for(const e of alive(1-u.team)){const k=e[key];(m.get(k)||m.set(k,[]).get(k)).push(e)}return[...m.values()]};
+const PICK={
+ nearRow:u=>{const n=nearestEnemy(u)[0];return n?alive(1-u.team).filter(e=>e.r===n.r):[]},
+ nearCol:u=>{const n=nearestEnemy(u)[0];return n?alive(1-u.team).filter(e=>e.c===n.c):[]},
+ denseRow:u=>{const g=groupBy(u,'r').sort((a,b)=>b.length-a.length);return g[0]||[]},
+ denseCol:u=>{const g=groupBy(u,'c').sort((a,b)=>b.length-a.length);return g[0]||[]},
+ weakest:u=>{const l=alive(1-u.team).slice().sort((a,b)=>a.hp-b.hp||cheb(u,a)-cheb(u,b));return l.length?[l[0]]:[]},
+ strongest:u=>{const l=alive(1-u.team).slice().sort((a,b)=>stat(b,'atk')-stat(a,'atk')||cheb(u,a)-cheb(u,b));return l.length?[l[0]]:[]},
+ farthest:u=>{const l=nearestEnemy(u);return l.length?[l[l.length-1]]:[]},
+ grouped:u=>{const l=alive(1-u.team);return l.filter(e=>l.some(o=>o!==e&&cheb(o,e)<=1))},
+ elevated:u=>alive(1-u.team).filter(e=>isStruct(e.c,e.r)),
+ isolated:u=>{const l=alive(1-u.team);return l.filter(e=>!l.some(o=>o!==e&&cheb(o,e)<=2))},
+ wounded:u=>alive(u.team).filter(a=>a.hp<4),
+ backline:u=>alive(u.team).filter(a=>a.d.cls==='S'||a.d.cls==='T')
+};
+const PICKTXT={nearRow:'tous les ennemis de la rangée la plus proche',nearCol:'tous les ennemis de la colonne la plus proche',denseRow:'tous les ennemis de la rangée la plus peuplée',denseCol:'tous les ennemis de la colonne la plus peuplée',
+ weakest:'l\'ennemi le plus blessé',strongest:'l\'ennemi à l\'ATK la plus haute',farthest:'l\'ennemi le plus éloigné',grouped:'les ennemis regroupés (au contact d\'un autre ennemi)',elevated:'les ennemis perchés sur une structure',isolated:'les ennemis isolés (aucun autre ennemi à ≤2 cases)',
+ wounded:'tous les alliés blessés',backline:'les alliés Technique et Soutien'};
+Object.assign(B,{
+ star:(n,len,dm=0,e=null,o={})=>({n,t:'none',aoe:'enemies',rad:0,x:`Étoile : ${fxList(dm,e)} à tous les ennemis alignés (${o.diag?'8':'4'} directions, ≤${len} cases).`,
+   pick:u=>{const set=new Map();for(const d of(o.diag?DIRS8:DIRS))for(const ce of lineCellsDir(u,d,len)){const x=unitAt(ce.c,ce.r);if(x&&x.team!==u.team)set.set(x.id,x)}return[...set.values()]},
+   run:async(u,l)=>{ringFx(u.mesh.position,ECOL(e),len*.5,.5);for(const x of l){if(dm)await dmg(x,dm,u);if(e&&x.alive)await addEff(x,e,u)}}}),
+ chain:(n,k,dm=0,e=null,o={})=>TGT(n,`Cible à portée : ${fxList(dm,e)}, puis rebondit jusqu'à ${k} fois sur l'ennemi le plus proche (≤3 cases).`,async(u,t)=>{
+   let cur=t;const hit=new Set();for(let i=0;i<=k&&cur&&cur.alive;i++){hit.add(cur.id);if(dm)await dmg(cur,dm,u);if(e&&cur.alive)await addEff(cur,e,u);
+     const nx=alive(1-u.team).filter(x=>!hit.has(x.id)&&cheb(x,cur)<=3).sort((a,b)=>cheb(a,cur)-cheb(b,cur))[0];if(nx)await lineFx(cur,[{c:nx.c,r:nx.r}],ECOL(e));cur=nx}},o),
+ auto:(n,pk,dm=0,e=null)=>({n,t:'none',aoe:'enemies',rad:0,x:`Cible automatiquement ${PICKTXT[pk]} : ${fxList(dm,e)}.`,pick:PICK[pk],
+   run:async(u,l)=>{for(const x of l){faceTo(u,x);ringFx(x.mesh.position,ECOL(e),1.1,.4);if(dm)await dmg(x,dm,u);if(e&&x.alive)await addEff(x,e,u)}}}),
+ autoBuf:(n,pk,parts,heal1=0)=>({n,t:'none',aoe:'allies',rad:0,x:`Cible automatiquement ${PICKTXT[pk]} : ${parts.map(([kk,v])=>bTxt(kk,v,'turn')).join(', ')}${heal1?`, +${heal1} PV`:''}.`,pick:PICK[pk],
+   run:async(u,l)=>{for(const x of l){for(const[kk,v]of parts)addBuff(x,kk,v,'turn',u);if(heal1)heal(x,heal1)}}})
 });
 
 const PRE2=PRE1;
@@ -388,46 +423,46 @@ const A2=(a,t1,b,t2)=>['Zoologique · '+a+(b!==a?' / '+b:''),TRAIT[t1](a)[0],TRA
 /* numéro de carte : [pouvoir, capacité, ultime] */
 const POW={
  0:['Anti-matière',B.hit('Rayon d\'anti-matière',1),B.zone('Annihilation',5,1,null,2,{ff:true})],
- 1:['Foudre olympienne',TIER(B.line('Foudre en ligne',6,0,'stun'),[[1,1,'rien',null],[2,4,'Assommé',R(B.line('_',6,0,'stun'))],[5,6,'Assommé et −1 PV',R(B.line('_',6,1,'stun'))]]),B.aoe('Fureur de Zeus','stun',3,1)],
- 2:['Reine de l\'Olympe',TIER(B.multiHeal('Drones de soin',2),[[1,1,'rien',null],[2,4,'+1 PV et purge',R(B.multiHeal('_',2))],[5,6,'+2 PV et purge',async(u,l)=>{for(const x of l){heal(x,2);cleanse(x)}}]]),B.aoe('Jalousie divine','disrupt',3)],
- 3:['Mers & tempêtes',B.line('Jet marin',5,0,'numb'),B.zone('Raz-de-marée',4,2,null,1)],
- 4:['Royaume des morts',B.drain('Âmes captives'),TIER(B.hit('Jugement dernier',3,{far:6}),[[1,2,'rien',null],[3,5,'−2 PV',R(B.hit('_',2,{far:6}))],[6,6,'−3 PV',R(B.hit('_',3,{far:6}))]])],
+ 1:['Foudre olympienne',TIER(B.line('Foudre en ligne',6,0,'stun'),[[1,1,'rien',null],[2,4,'Assommé',R(B.line('_',6,0,'stun'))],[5,6,'Assommé et −1 PV',R(B.line('_',6,1,'stun'))]]),B.chain('Chaîne de foudre',3,1,'stun')],
+ 2:['Reine de l\'Olympe',TIER(B.multiHeal('Drones de soin',2),[[1,1,'rien',null],[2,4,'+1 PV et purge',R(B.multiHeal('_',2))],[5,6,'+2 PV et purge',async(u,l)=>{for(const x of l){heal(x,2);cleanse(x)}}]]),B.auto('Jalousie divine','strongest',1,'disrupt')],
+ 3:['Mers & tempêtes',B.line('Jet marin',5,0,'numb',{w:1}),B.zone('Raz-de-marée',99,0,null,1,{shape:'row3'})],
+ 4:['Royaume des morts',B.auto('Faucheuse','weakest',1),TIER(B.hit('Jugement dernier',3,{far:6}),[[1,2,'rien',null],[3,5,'−2 PV',R(B.hit('_',2,{far:6}))],[6,6,'−3 PV',R(B.hit('_',3,{far:6}))]])],
  5:['Stratégie divine',B.self('Formation en tortue',[['def',2]]),B.allyAoe('Plan de bataille',[['atk',1],['def',1]],99)],
- 6:['Charme',TIER(B.multiHeal('Baiser guérisseur',2),[[1,1,'rien',null],[2,4,'+1 PV et purge',R(B.multiHeal('_',2))],[5,6,'+2 PV et purge',async(u,l)=>{for(const x of l){heal(x,2);cleanse(x)}}]]),B.healAoe('Étreinte d\'amour')],
- 7:['Guerre',B.combo('Fureur guerrière',3),B.aoe('Cri de guerre','stun',PRE1,1)],
+ 6:['Charme',TIER(B.multiHeal('Baiser guérisseur',2),[[1,1,'rien',null],[2,4,'+1 PV et purge',R(B.multiHeal('_',2))],[5,6,'+2 PV et purge',async(u,l)=>{for(const x of l){heal(x,2);cleanse(x)}}]]),B.autoBuf('Étreinte d\'amour','wounded',[['def',1]],1)],
+ 7:['Guerre',B.combo('Fureur guerrière',3),B.star('Cri de guerre',4,1,'stun',{diag:true})],
  8:['Lumière & musique',TIER(B.multiHeal('Chant de guérison',2),[[1,1,'rien',null],[2,4,'+1 PV et purge',R(B.multiHeal('_',2))],[5,6,'+2 PV et purge',async(u,l)=>{for(const x of l){heal(x,2);cleanse(x)}}]]),B.revive('Résurrection solaire')],
- 9:['Moissons',B.line('Ronces rampantes',5,0,'numb'),B.aoe('Famine','toxic',PRE1)],
+ 9:['Moissons',B.line('Ronces rampantes',5,0,'numb'),B.auto('Famine','denseCol',0,'toxic')],
  10:['Messager divin',B.dash('Sandales ailées',4),B.act('Course du messager',1)],
  11:['Ivresse',B.combo('Danse enivrée',2),B.aoe('Bacchanale','disrupt',3,1)],
  12:['Récoltes',B.dash('Pas de blé',3,['hab',1]),B.allyAoe('Abondance',[['hab',2]],99,'round')],
  13:['Forge divine',TIER(B.repair('Réparation'),[[1,1,'rien',null],[2,4,'+1 PV, purge, +1 DEF',R(B.repair('_'))],[5,6,'+2 PV, purge, +2 DEF',async(u,t)=>{heal(t,2);cleanse(t);addBuff(t,'def',2,'turn',u)}]]),B.allyAoe('Armes forgées',[['atk',1],['def',1]],99,'round')],
  14:AN('Loup','pack'),
- 15:['Air',B.line('Rafale perçante',6,0,'numb'),B.aoe('Tornade','stun',3)],
- 16:['Logique inversée',TIER(B.swap('Absurdité'),[[1,1,'rien',null],[2,4,'échange de place',R(B.swap('_'))],[5,6,'échange et cible Assommée',async(u,t)=>{await swapPos(u,t);await addEff(t,'stun',u)}]]),B.aoe('Paradoxe','disrupt',PRE1)],
+ 15:['Air',B.line('Rafale perçante',6,0,'numb'),B.zone('Mur de vent',99,0,'stun',0,{shape:'col3'})],
+ 16:['Logique inversée',TIER(B.swap('Absurdité'),[[1,1,'rien',null],[2,4,'échange de place',R(B.swap('_'))],[5,6,'échange et cible Assommée',async(u,t)=>{await swapPos(u,t);await addEff(t,'stun',u)}]]),B.auto('Paradoxe','isolated',1,'disrupt')],
  17:['Mouvement',B.multiBuf('Accélération collective',2,[['hab',2]],'round'),B.aoeDeb('Ralentissement général','hab',-2,99)],
- 18:['Magnétisme',B.pull('Aimant'),B.aoe('Champ magnétique','stun',3)],
+ 18:['Magnétisme',B.pull('Aimant'),B.auto('Champ magnétique','grouped',1,'stun')],
  19:['Gaz',B.hazard('Nuage toxique',4,1,'gas',2),B.hazard('Grande nappe de gaz',4,2,'gas',3)],
- 20:['Slime',B.hazard('Flaque de slime',3,1,'slime',2),B.aoe('Marée visqueuse','numb',PRE1,1)],
- 21:['Électricité',TIER(B.line('Arc électrique',5,1),[[1,1,'rien',null],[2,4,'−1 PV',R(B.line('_',5,1))],[5,6,'−2 PV',R(B.line('_',5,2))]]),B.zone('Orage',5,1,'stun',1)],
- 23:['Gravité',B.eff('Gravité accrue','numb'),B.aoe('Singularité','numb',4,1)],
+ 20:['Slime',B.hazard('Flaque de slime',3,1,'slime',2),B.auto('Marée visqueuse','elevated',1,'numb')],
+ 21:['Électricité',B.chain('Arc électrique',3,1),B.zone('Orage',5,1,'stun',1)],
+ 23:['Gravité',B.eff('Gravité accrue','numb'),B.zone('Écrasement gravitationnel',99,0,'numb',1,{shape:'row'})],
  25:['Carcajou + Énergie cinétique',TRAIT.bite('Carcajou')[0],B.finisher('Impact cinétique',1,{far:5})],
  30:['Temps',B.bomb('Bombe temporelle',2,2),TIER(B.act('Arrêt du temps',2),[[1,2,'rien',null],[3,5,'+1 action',R(B.act('_',1))],[6,6,'+2 actions',R(B.act('_',2))]])],
  32:['Chance',TIER(B.ally('Coup de chance','def',2),[[1,1,'malchance : −1 DEF pour toi',async u=>{addBuff(u,'def',-1,'turn',u);pop(u,'Malchance','#f88')}],[2,4,'+2 DEF',R(B.ally('_','def',2))],[5,6,'+3 DEF et +1 PV',async(u,t)=>{addBuff(t,'def',3,'turn',u);heal(t,1)}]]),B.allyAoe('Jour de veine',[['atk',1],['def',1]],99,'round')],
- 35:AN('Hippopotame','charge'),
+ 35:['Zoologique · Hippopotame',TRAIT.charge('Hippopotame')[0],B.line('Ruée de l\'hippopotame',4,1,'stun',{w:1})],
  40:['Invisibilité',B.self('Disparition',[['def',2]]),B.strike('Frappe invisible',5,2)],
  41:['Seiche + Éléphant d\'Afrique',TRAIT.spit('Seiche')[0],TRAIT.tank('Éléphant')[1]],
  51:['Virus',TIER(B.bomb('Incubation virale',2,2),[[1,1,'rien',null],[2,4,'bombe −2 PV dans 2 manches',R(B.bomb('_',2,2))],[5,6,'bombe −3 PV dans 1 manche',R(B.bomb('_',3,1))]]),B.aoe('Pandémie','toxic',3)],
- 52:['Lames',B.line('Onde tranchante',4,1,null,{diag:true}),B.zone('Tourbillon de lames',3,2,null,1,{shape:'cross'})],
+ 52:['Lames',B.line('Onde tranchante',4,1,null,{diag:true}),B.zone('Tourbillon en X',5,3,null,1,{shape:'x'})],
  53:['Période',B.hot('Rajeunissement',1,2),B.aoeDeb('Retour à l\'enfance','atk',-1,4)],
- 54:['Tournis',B.combo('Enchaînement de coups',3),B.aoe('Cyclone de membres',null,PRE1,1)],
+ 54:['Tournis',B.combo('Enchaînement de coups',3),B.zone('Cyclone de membres',4,2,null,1,{shape:'ring'})],
  62:['Perméabilité',B.dash('Traverser les murs',3),B.strike('Surgir de la paroi',4,1)],
- 63:['IA',TIER(B.multi('Botnet',3,'jam'),[[1,1,'rien',null],[2,4,'Brouillage',R(B.multi('_',3,'jam'))],[5,6,'Brouillage et −1 PV',R(B.multi('_',3,'jam',1))]]),B.aoe('Ransomware','disrupt',3)],
- 66:AN('Suricate','support'),
+ 63:['IA',TIER(B.multi('Botnet',3,'jam'),[[1,1,'rien',null],[2,4,'Brouillage',R(B.multi('_',3,'jam'))],[5,6,'Brouillage et −1 PV',R(B.multi('_',3,'jam',1))]]),B.zone('Ransomware',99,0,'disrupt',0,{shape:'comb'})],
+ 66:['Zoologique · Suricate',TRAIT.support('Suricate')[0],B.autoBuf('Alerte générale','backline',[['def',2]])],
  67:['Contraire',B.swap('Inversion'),B.aoeDeb('Contre-pied','def',-1,99)],
  73:['Espace',TIER(B.dash('Téléportation',5),[[1,1,'raté',null],[2,4,'téléportation',R(B.dash('_',5))],[5,6,'téléportation et +1 ATK',R(B.dash('_',5,['atk',1]))]]),B.strike('Distorsion',6,1)],
  74:['Portail',DIE(B.swap('Portails jumeaux',5),2),B.dash('Grand portail',6)],
  84:['Zoologique · Veuve noire',B.exploit('Piqûre fatale',['toxic'],1,2),TRAIT.venom('Veuve noire')[1]],
- 87:AN('Rhinocéros','charge'),
+ 87:['Zoologique · Rhinocéros',TRAIT.charge('Rhinocéros')[0],B.line('Corne perçante',7,2)],
  95:['Élastique',B.pull('Bras élastique'),B.aoe('Claque élastique','stun',PRE1)],
  106:['Personnalité IA',B.link('Synchronisation'),B.allyAoe('Mise à jour',[['atk',1]],99,'round')],
  107:A2('Rainette','fast','Rainette','venom'),
@@ -436,15 +471,15 @@ const POW={
  110:AN('Panda','tank'),
  111:['Zoologique · Panthère noire',B.exploit('Mise à mort',['stun','numb','frozen'],1,2),TRAIT.stealth('Panthère noire')[1]],
  118:['Effacement',TIER(B.eff('Effacer un pouvoir','disrupt'),[[1,2,'rien',null],[3,5,'Bouleversement',R(B.eff('_','disrupt'))],[6,6,'Bouleversement et −1 PV',R(B.eff('_','disrupt',0,1))]]),B.aoe('Page blanche','disrupt',5)],
- 119:AN('Lion','bite'),
+ 119:['Zoologique · Lion',TRAIT.bite('Lion')[0],B.star('Rugissement',4,0,'stun')],
  120:['Piques',PAS('Hérissement','Quand il est attaqué, d6 5+ : l\'attaquant perd 1 PV.',{thorns:5}),B.aoe('Explosion de piques',null,1,1)],
  128:['Température froide + Éponge',B.eff('Givre','numb'),B.hit('Restitution des dégâts',2)],
  133:['Sucre',TIER(B.self('Sucre rapide',[['hab',2],['atk',1]]),[[1,1,'coup de barre : −1 DEF',async u=>{addBuff(u,'def',-1,'turn',u)}],[2,4,'+2 HAB, +1 ATK',R(B.self('_',[['hab',2],['atk',1]]))],[5,6,'+3 HAB, +2 ATK',R(B.self('_',[['hab',3],['atk',2]]))]]),B.self('Overdose de sucre',[['atk',2],['def',1]],1)],
- 139:AN('Crocodile du Nil','bite'),
+ 139:['Zoologique · Crocodile du Nil',TRAIT.bite('Crocodile du Nil')[0],B.auto('Roulis mortel','nearRow',1)],
  140:['Sable',B.aoe('Sable dans les yeux','jam',2),B.aoe('Tempête de sable','numb',4,1)],
  141:AN('Morse','tank'),
  143:AN('Léopard','stealth'),
- 144:['Boue',B.hazard('Bourbier',3,1,'slime',2),B.aoe('Glissement de terrain','stun',PRE1)],
+ 144:['Boue',B.hazard('Bourbier',3,1,'slime',2),B.zone('Glissement de terrain',99,0,'stun',0,{shape:'col3'})],
  152:['Plante',TIER(B.hot('Graine de vie',1,2),[[1,1,'rien',null],[2,4,'+1 PV/manche (2 manches)',R(B.hot('_',1,2))],[5,6,'+1 PV/manche (3 manches) et +1 PV',async(u,t)=>{await B.hot('_',1,3).run(u,t);heal(t,1)}]]),B.revive('Renaissance végétale')],
  154:AN('Anémone','venom'),
  155:['Écorce',B.self('Armure d\'écorce',[['def',2]]),B.allyAoe('Forêt protectrice',[['def',1]],99)],
@@ -455,18 +490,18 @@ const POW={
  176:['Trou noir',B.pull('Aspiration'),B.zone('Horizon des événements',5,2,'numb',1,{ff:true})],
  177:['Vol de pouvoirs',B.steal('Pickpocket'),B.steal('Casse du siècle',1)],
  178:['Destruction',TIER(B.hit('Poussière',1),[[1,1,'rien',null],[2,4,'−1 PV',R(B.hit('_',1))],[5,6,'−2 PV',R(B.hit('_',2))]]),DIE(B.hit('Anéantissement',3),4)],
- 179:['Ronces',B.line('Ronces',4,0,'numb'),B.aoe('Forêt de ronces','numb',PRE1,1)],
+ 179:['Ronces',B.line('Ronces',4,0,'numb'),B.auto('Forêt de ronces','nearRow',1,'numb')],
  188:AN('Renard','stealth'),
  189:['Rembobinage',B.heal('Rembobinage'),DIE(B.act('Retour en arrière',1),3)],
  190:['Métal',PAS('Corps métallique','+1 DEF, immunisé à la Brûlure.',{immune:['burn'],stat:(u,k)=>k==='def'?1:0}),B.self('Armure lourde',[['atk',1],['def',2]],1)],
- 200:['Séisme',TIER(B.line('Fissure',6,0,'numb'),[[1,1,'rien',null],[2,4,'Engourdi',R(B.line('_',6,0,'numb'))],[5,6,'Engourdi et −1 PV',R(B.line('_',6,1,'numb'))]]),B.zone('Grand séisme',5,2,'stun',1)],
+ 200:['Séisme',TIER(B.line('Fissure',6,0,'numb'),[[1,1,'rien',null],[2,4,'Engourdi',R(B.line('_',6,0,'numb'))],[5,6,'Engourdi et −1 PV',R(B.line('_',6,1,'numb'))]]),B.zone('Onde sismique',99,0,'stun',1,{shape:'row3'})],
  201:['Magma',PAS('Peau de lave','Immunisé à la Brûlure, +1 ATK.',{immune:['burn'],stat:(u,k)=>k==='atk'?1:0}),B.hazard('Coulée de lave',5,1,'lava',3)],
  202:['Bête',PAS('Monstre craint','+2 ATK quand il a 2 PV ou moins.',{stat:(u,k)=>k==='atk'&&u.hp<=2?2:0}),B.aoe('Terreur pure','stun',3,1)],
- 203:['Climat',TIER(B.hazard('Tempête persistante',4,1,'storm',2),[[1,1,'la tempête se dissipe',null],[2,4,'zone 3×3 pendant 2 manches',R(B.hazard('_',4,1,'storm',2))],[5,6,'zone 3×3 pendant 3 manches',R(B.hazard('_',4,1,'storm',3))]]),B.zone('Foudre du ciel',5,1,'stun',1)],
+ 203:['Climat',TIER(B.hazard('Tempête persistante',4,1,'storm',2),[[1,1,'la tempête se dissipe',null],[2,4,'zone 3×3 pendant 2 manches',R(B.hazard('_',4,1,'storm',2))],[5,6,'zone 3×3 pendant 3 manches',R(B.hazard('_',4,1,'storm',3))]]),B.zone('Foudre du ciel',99,0,'stun',1,{shape:'col'})],
  213:AN('Pygargue à tête blanche','flight'),
  214:['Conscience',TIER(B.repair('Réparation de conscience'),[[1,1,'rien',null],[2,4,'+1 PV, purge, +1 DEF',R(B.repair('_'))],[5,6,'+2 PV, purge, +2 DEF',async(u,t)=>{heal(t,2);cleanse(t);addBuff(t,'def',2,'turn',u)}]]),B.allyAoe('Éveil des objets',[['atk',1],['def',1]],99,'round')],
  215:AN('Manchot royal','tank'),
- 218:['Roue',PAS('Roues','+1 HAB en permanence.',{stat:(u,k)=>k==='hab'?1:0}),B.strike('Écrasement à roues',5,1)],
+ 218:['Roue',PAS('Roues','+1 HAB en permanence.',{stat:(u,k)=>k==='hab'?1:0}),B.line('Rouleau compresseur',5,1,'stun',{w:1})],
  222:['Transmutation',TIER(B.repair('Transmutation curative'),[[1,1,'rien',null],[2,4,'+1 PV, purge, +1 DEF',R(B.repair('_'))],[5,6,'+2 PV, purge, +2 DEF',async(u,t)=>{heal(t,2);cleanse(t);addBuff(t,'def',2,'turn',u)}]]),B.healAoe('Alchimie')],
  223:['Forme arme',B.combo('Danse de lames',3),B.blitz('Lame vivante')],
  234:['Air comprimé + Kératine',B.dash('Propulsion d\'air',3),B.strike('Griffes de kératine',4,2)],
@@ -488,23 +523,23 @@ const POW={
  288:['Barrière',B.allyAoe('Barrière',[['def',2]],1),B.healAoe('Mur de soin')],
  290:['Éclosion',B.hot('Éclosion lente',1,2),B.healAoe('Nuée de bourgeons')],
  292:['Régénération',PAS('Régénération','Récupère 1 PV à la fin de chaque manche.',{regen:1}),B.self('Renaissance',[['def',1]],2)],
- 300:['Eau',TIER(B.line('Jet d\'eau',5,0,'numb'),[[1,1,'rien',null],[2,4,'Engourdi',R(B.line('_',5,0,'numb'))],[5,6,'Engourdi et −1 PV',R(B.line('_',5,1,'numb'))]]),B.zone('Déferlante',4,2,null,1,{shape:'cross'})],
+ 300:['Eau',TIER(B.line('Jet d\'eau',5,0,'numb'),[[1,1,'rien',null],[2,4,'Engourdi',R(B.line('_',5,0,'numb'))],[5,6,'Engourdi et −1 PV',R(B.line('_',5,1,'numb'))]]),B.zone('Déferlante',99,0,null,1,{shape:'row'})],
  301:['Respiration',B.dash('Plongée',3),B.strike('Assaut sous-marin',4,1)],
  302:AN('Orque','bite'),
  306:AN('Ours polaire','tank'),
- 313:['Astéroïdes',TIER(B.zone('Météorite',5,1,null,1),[[1,1,'rien',null],[2,4,'−1 PV',R(B.zone('_',5,1,null,1))],[5,6,'−1 PV et Assommés',R(B.zone('_',5,1,'stun',1))]]),B.zone('Pluie d\'astéroïdes',6,2,null,1,{ff:true})],
+ 313:['Astéroïdes',TIER(B.zone('Météorite',5,1,null,1),[[1,1,'rien',null],[2,4,'−1 PV',R(B.zone('_',5,1,null,1))],[5,6,'−1 PV et Assommés',R(B.zone('_',5,1,'stun',1))]]),B.zone('Pluie d\'astéroïdes',99,0,null,1,{shape:'comb',ff:true})],
  314:['Esprit',B.swap('Échange d\'esprit'),TIER(B.eff('Possession','frozen'),[[1,2,'rien',null],[3,5,'Gelé',R(B.eff('_','frozen'))],[6,6,'Gelé et −1 PV',R(B.eff('_','frozen',0,1))]])],
  315:['Manipulation mentale',B.eff('Suggestion','jam'),TIER(B.eff('Contrôle mental','frozen'),[[1,2,'rien',null],[3,5,'Gelé',R(B.eff('_','frozen'))],[6,6,'Gelé et −1 PV',R(B.eff('_','frozen',0,1))]])],
  323:['Dragon de Komodo + Ailes',TRAIT.venom('Komodo')[0],TRAIT.flight('Ailes')[1]],
  324:['Tigre + Pierre',TRAIT.stealth('Tigre')[0],B.aoe('Éboulement de pierre','stun',PRE1,1)],
  325:['Buffle + Durcissement',TRAIT.charge('Buffle')[0],B.self('Corps invincible',[['atk',1],['def',3]])],
  326:['Singe capucin + Portail',TRAIT.fast('Capucin')[0],B.dash('Portails communicants',6)],
- 334:AN('Requin blanc','bite'),
+ 334:['Zoologique · Requin blanc',TRAIT.bite('Requin blanc')[0],B.chain('Frénésie de sang',4,1)],
  335:['Zoologique · Scorpion',B.exploit('Dard',['toxic','numb'],1,2),TRAIT.venom('Scorpion')[1]],
  336:['Fumée',B.hazard('Écran de fumée',4,1,'smoke',2),B.aoe('Nuage suffocant','disrupt',4)],
  337:AN('Mandrill','pack'),
- 347:['Acide',B.exploit('Corrosion sur plaie',['mark','numb'],1,2),B.aoe('Pluie acide',null,4,1)],
- 348:AN('Piranha','bite'),
+ 347:['Acide',B.exploit('Corrosion sur plaie',['mark','numb'],1,2),B.zone('Pluie acide',99,0,null,1,{shape:'comb'})],
+ 348:['Zoologique · Piranha',TRAIT.bite('Piranha')[0],B.auto('Banc de piranhas','weakest',2)],
  349:['Rêves',B.eff('Somnolence','numb'),TIER(B.eff('Sommeil profond','frozen'),[[1,2,'rien',null],[3,5,'Gelé',R(B.eff('_','frozen'))],[6,6,'Gelé et −1 PV',R(B.eff('_','frozen',0,1))]])],
  350:['Forme maxi',TIER(B.self('Croissance',[['atk',2],['def',1]]),[[1,1,'rien',null],[2,4,'+2 ATK, +1 DEF',R(B.self('_',[['atk',2],['def',1]]))],[5,6,'+3 ATK, +2 DEF',R(B.self('_',[['atk',3],['def',2]]))]]),B.aoe('Piétinement de géant','stun',PRE1,1)],
  351:['État',B.eff('Solidification','numb'),B.aoe('Changement d\'état','stun',PRE1)],
@@ -517,7 +552,7 @@ const POW={
  373:['Muscles',PAS('Muscles','+1 ATK en permanence.',{stat:(u,k)=>k==='atk'?1:0}),B.blitz('Déchaînement')],
  374:['Feu',PAS('Corps ardent','Immunisé à la Brûlure.',{immune:['burn']}),B.hazard('Mur de flammes',5,2,'fire',2,{shape:'cross'})],
  375:['Réalité',TIER(B.dash('Copier-coller',4),[[1,1,'rien',null],[2,4,'téléportation',R(B.dash('_',4))],[5,6,'téléportation et +1 PV',async(u,c)=>{await teleport(u,c);heal(u,1)}]]),DIE(B.act('Annuler',2),3)],
- 376:AN('Cerf','charge')
+ 376:['Zoologique · Cerf',TRAIT.charge('Cerf')[0],B.zone('Ramure',5,1,'stun',0,{shape:'ring'})],
 };
 const RAW=[[0,"Néo","Performer",3,4,2,3,5],[1,"Zeus","Brawler",4,3,3,2,5],[2,"Héra","Engineer",3,3,2,3,4],[3,"Poséidon","Protector",2,4,3,2,4],[4,"Hadès","Ranger",3,2,2,4,4],[5,"Athéna","Protector",3,4,1,2,3],[6,"Aphrodite","Assist",2,3,2,3,3],[7,"Arès","Juggernaut",4,3,2,1,3],[8,"Apollo","Assist",2,2,3,3,3],[9,"Déméter","Ranger",2,2,2,4,3],[10,"Hermès","Flanker",3,1,4,2,3],[11,"Dionysos","Brawler",3,3,1,2,3],[12,"Cérès","Flanker",3,2,3,2,3],[13,"Héphaistos","Engineer",4,3,1,2,3],[14,"Moon Fang","Juggernaut",3,4,2,1,3],[15,"Vortex","Ranger",2,1,3,4,3],[16,"Brainless","Performer",2,2,3,3,3],[17,"Move","Assist",3,2,2,3,3],[18,"Magnet","Protector",2,4,1,3,3],[19,"Scatter","Assist",3,2,3,2,3],[20,"Viscous","Protector",3,3,2,2,3],[21,"Blackout","Flanker",3,2,4,2,4],[23,"Hover","Ranger",2,3,2,3,3],[25,"Kinetic","Ranger",3,1,2,4,3],[30,"Mr.Midnight","Performer",3,3,2,3,4],[32,"Chance","Assist",3,3,1,3,3],[35,"Miziki","Juggernaut",3,4,1,2,3],[40,"Diaphane","Flanker",3,3,3,2,4],[41,"Italanta","Juggernaut",3,4,1,2,3],[51,"Captain Diziiz","Engineer",4,3,2,2,4],[52,"Lann","Protector",3,3,2,2,3],[53,"Dr.Fank","Assist",3,3,2,2,3],[54,"Turni","Brawler",4,2,2,2,3],[62,"Cracken","Assist",3,2,3,3,4],[63,"Zero Day","Flanker",2,2,3,3,3],[66,"Rooter","Engineer",3,2,3,1,2],[67,"Smish","Assist",2,3,2,2,2],[73,"Kasuf","Flanker",3,3,4,1,4],[74,"Passage","Ranger",2,2,2,4,3],[84,"Venena","Ranger",3,1,3,4,4],[87,"Pembe","Engineer",3,3,2,2,3],[95,"Gummi","Protector",3,3,2,3,4],[106,"Bot","Assist",2,3,2,2,1],[107,"Alíngua","Flanker",3,2,3,3,4],[108,"Dugalen","Ranger",3,2,1,4,3],[109,"Monstruo","Performer",3,3,3,1,3],[110,"Zhúzi","Juggernaut",4,3,2,1,3],[111,"Khama","Brawler",3,2,3,2,3],[118,"Apagar","Assist",3,3,2,3,4],[119,"Shars","Brawler",4,3,2,1,3],[120,"Qima","Juggernaut",3,3,3,1,3],[128,"Gurume","Brawler",3,4,3,1,4],[133,"Lecker","Protector",3,3,2,1,2],[139,"Breakbone","Juggernaut",3,4,3,1,4],[140,"Ramil","Performer",3,3,2,2,3],[141,"Icetooth","Protector",3,3,1,3,3],[143,"Boneka","Brawler",2,3,2,3,3],[144,"Tinard","Protector",2,4,2,1,2],[152,"Arwat","Assist",2,4,3,2,4],[154,"Veibuca","Ranger",3,2,2,3,3],[155,"Bellen","Protector",2,3,2,3,3],[157,"Bato","Brawler",3,3,2,2,2],[165,"Morfosia","Performer",2,3,3,3,4],[166,"Muerta","Performer",3,2,3,2,3],[167,"Alzali","Ranger",3,2,2,3,3],[176,"Ahri","Juggernaut",3,4,2,2,4],[177,"Volé","Assist",3,3,3,2,4],[178,"Vacía","Performer",4,4,2,1,4],[179,"Meno","Brawler",3,4,1,2,3],[188,"Chitry","Flanker",4,3,3,1,4],[189,"Rebob","Performer",2,2,3,3,3],[190,"Logam","Juggernaut",3,4,2,1,3],[200,"Trake","Brawler",4,3,1,3,4],[201,"Pélé","Performer",4,3,2,2,4],[202,"Belzébuth","Juggernaut",4,4,2,1,4],[203,"Hörmung","Performer",4,2,3,2,4],[213,"Sharp","Brawler",3,2,3,3,4],[214,"Jinsei","Engineer",3,2,3,2,3],[215,"Alf","Protector",2,3,3,2,3],[218,"Big Wheel","Flanker",2,2,3,2,2],[222,"Ban-Cheol","Assist",3,3,3,2,4],[223,"Shinda","Performer",2,2,3,3,3],[234,"Panja","Performer",3,4,2,2,4],[235,"Inkho","Assist",2,3,2,4,3],[236,"Rang","Ranger",3,2,2,3,3],[245,"Otrava","Brawler",4,3,2,2,4],[246,"Sneaka","Flanker",3,3,3,2,4],[247,"Crâne","Ranger",3,1,3,3,3],[257,"Rènào","Flanker",3,3,4,1,4],[258,"Jog","Protector",3,4,2,1,3],[274,"Ora","Performer",3,3,3,2,4],[275,"Dafa","Protector",2,4,2,2,3],[276,"Guano","Brawler",4,3,2,1,3],[277,"Multi","Juggernaut",3,3,2,2,3],[278,"Levit","Juggernaut",3,3,1,3,3],[279,"Rozko","Flanker",3,2,3,2,3],[280,"Myrsky","Engineer",3,2,2,3,3],[281,"Desgarra","Ranger",3,1,3,3,3],[288,"Tabib","Protector",3,4,2,2,4],[290,"Rescate","Performer",2,2,2,4,3],[292,"Kokal","Juggernaut",2,4,2,2,3],[300,"Kuini Wai","Protector",3,4,2,2,4],[301,"Tuba","Flanker",2,3,3,2,3],[302,"Natsi","Juggernaut",3,3,3,1,3],[306,"Nanook","Brawler",3,3,2,2,3],[313,"Milaza","Ranger",2,3,2,4,4],[314,"Anma","Flanker",3,2,3,2,3],[315,"Djinn","Assist",2,2,3,3,3],[323,"Naga","Protector",3,3,3,3,5],[324,"Sanjin","Brawler",4,3,2,2,4],[325,"Pembe","Protector",3,4,2,2,4],[326,"Hun","Flanker",3,2,4,2,4],[334,"Tangaroa","Juggernaut",4,4,3,1,5],[335,"Nabsi","Engineer",3,2,3,3,4],[336,"Fumar","Flanker",3,3,3,2,4],[337,"Oum-Oum","Ranger",2,2,3,4,4],[347,"Silla","Engineer",3,4,3,2,5],[348,"Frasco","Engineer",2,4,2,3,4],[349,"Mriya","Flanker",2,2,4,3,4],[350,"Giganto","Brawler",4,3,2,2,4],[351,"Mêlée","Juggernaut",2,3,2,3,3],[360,"Héméra","Flanker",2,2,4,4,5],[361,"Random","Ranger",3,2,2,4,4],[362,"Kaï","Juggernaut",3,4,2,2,4],[363,"Hokioi","Flanker",2,3,4,2,4],[364,"Nasua","Flanker",2,2,3,3,3],[365,"Tasalub","Protector",4,4,1,1,3],[373,"Black.1","Brawler",4,4,2,2,5],[374,"Red.2","Flanker",4,2,3,2,4],[375,"Green.3","Performer",3,2,3,3,4],[376,"Blue.4","Juggernaut",3,3,3,2,4]];
 const CHARS=RAW.map(([num,name,sub,atk,def,hab,pre,stars])=>{const p=POW[num];
@@ -611,32 +646,80 @@ const selRing=new THREE.Mesh(new THREE.RingGeometry(0.4,0.5,24).rotateX(-Math.PI
 const tokenM=new THREE.Group();const tk=new THREE.Mesh(new THREE.OctahedronGeometry(0.22,0),mat(0xffc93c,{emissive:0x664400}));tk.position.y=0.55;tk.castShadow=true;tokenM.add(tk);
 const tkr=new THREE.Mesh(new THREE.RingGeometry(0.28,0.36,6).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0xffc93c,side:THREE.DoubleSide}));tkr.position.y=0.04;tokenM.add(tkr);tokenM.visible=false;scene.add(tokenM);
 
+/* Figurines façon Minecraft : personnage cubique d'une seule couleur (matière unique), pose différente par personnage.
+   Les Blancs se tiennent sur un socle rond, les Noirs sur un socle carré. */
+const POSES={
+ A:[{ra:[-2.7,.15],la:[.35,.35],ll:[.3,.12],rl:[-.25,.12],ty:.3,hy:-.25,prop:'sword'},                 // épée levée
+    {ra:[-.7,.25],la:[.9,.2],ll:[.1,.05],rl:[-1.35,.05],lean:-.12,hy:.2},                                   // coup de pied
+    {ra:[-1.25,.1],la:[-1.35,.25],ll:[.55,.2],rl:[-.5,.2],lean:.18,crouch:.06,hy:0}],                       // poings serrés
+ D:[{ra:[-1.15,-.55],la:[-1.15,-.55],ll:[0,.14],rl:[0,.14],hy:0,prop:'plate'},                              // garde croisée
+    {ra:[-.35,.25],la:[-1.45,.05],ll:[.25,.16],rl:[-.15,.16],ty:-.25,hy:.2,prop:'shield'},                  // bouclier devant
+    {ra:[-.1,.85],la:[-.1,.85],ll:[0,.4],rl:[0,.4],crouch:.08,hy:0,prop:'plate'}],                          // jambes écartées
+ T:[{ra:[-1.57,0],la:[-1.5,.05],ll:[.1,.1],rl:[-.1,.1],ty:.7,hy:-.65,prop:'bow'},                           // tir à l'arc
+    {ra:[.55,.3],la:[.55,.3],ll:[.75,.12],rl:[-.5,.12],lean:.5,crouch:.16,hy:-.1,prop:'quiver'},            // furtif accroupi
+    {ra:[-1.6,.05],la:[.25,.25],ll:[0,.1],rl:[0,.1],ty:.25,hy:.25,prop:'quiver'}],                         // il désigne
+ S:[{ra:[-1.95,.2],la:[-1.95,.2],ll:[0,.1],rl:[0,.1],hy:.08,prop:'staff'},                                  // incantation
+    {ra:[-.5,1.2],la:[-.5,1.2],ll:[0,.1],rl:[0,.1],hy:-.1,prop:'book'},                                    // mains ouvertes
+    {ra:[-1.05,-.5],la:[-1.05,-.5],ll:[0,.06],rl:[0,.06],hy:.35,lean:.12,prop:'book'}]                     // prière
+};
 function buildUnit(d,team){
   const g=new THREE.Group(),body=new THREE.Group();g.add(body);const mats=[];
   const M=col=>{const m=mat(col);m.userData.col=new THREE.Color(col);mats.push(m);return m};
-  const add=(geo,m,x=0,y=0,z=0)=>{const me=new THREE.Mesh(geo,m);me.position.set(x,y,z);me.castShadow=true;body.add(me);return me};
-  const col=new THREE.Color(CLS[d.cls].h).offsetHSL(((d.num*37)%24-12)/360,0,((d.num*13)%9-4)/100).getHex(),light=new THREE.Color(col).lerp(new THREE.Color(0xffffff),.4).getHex(),dark=new THREE.Color(col).multiplyScalar(.55).getHex();
-  const idx=d.num%2,round=team===0;   // Blancs : socle rond et formes arrondies · Noirs : socle carré et formes anguleuses
-  const tcol=round?0xf5f7fc:0x15161d,tcol2=round?0xd9deee:0x2a2c3a,trim=round?0xffffff:0x8b5cff;
-  if(round){add(new THREE.CylinderGeometry(0.46,0.5,0.1,32),M(tcol),0,0.05,0);const rim=add(new THREE.TorusGeometry(0.48,0.04,6,32),M(trim),0,0.1,0);rim.rotation.x=Math.PI/2;add(new THREE.CylinderGeometry(0.36,0.4,0.1,24),M(tcol2),0,0.14,0)}
-  else{add(new THREE.BoxGeometry(0.88,0.1,0.88),M(tcol),0,0.05,0);const rim=add(new THREE.TorusGeometry(0.62,0.045,4,4),M(trim),0,0.1,0);rim.rotation.set(Math.PI/2,0,Math.PI/4);add(new THREE.BoxGeometry(0.7,0.1,0.7),M(tcol2),0,0.14,0)}
+  const add=(par,geo,m,x=0,y=0,z=0)=>{const me=new THREE.Mesh(geo,m);me.position.set(x,y,z);me.castShadow=true;par.add(me);return me};
+  const col=new THREE.Color(CLS[d.cls].h).offsetHSL(((d.num*37)%24-12)/360,0,((d.num*13)%9-4)/100).getHex();
+  const round=team===0;
+  // socle : rond (Blancs) ou carré (Noirs)
+  const tcol=round?0xf5f7fc:0x15161d,tcol2=round?0xd9deee:0x2a2c3a,trim=round?0xffffff:0x8b5cff,mb=M(tcol),mb2=M(tcol2),mt=M(trim);
+  if(round){add(body,new THREE.CylinderGeometry(0.46,0.5,0.1,32),mb,0,0.05,0);const rim=add(body,new THREE.TorusGeometry(0.48,0.04,6,32),mt,0,0.1,0);rim.rotation.x=Math.PI/2;add(body,new THREE.CylinderGeometry(0.36,0.4,0.1,24),mb2,0,0.14,0)}
+  else{add(body,new THREE.BoxGeometry(0.88,0.1,0.88),mb,0,0.05,0);const rim=add(body,new THREE.TorusGeometry(0.62,0.045,4,4),mt,0,0.1,0);rim.rotation.set(Math.PI/2,0,Math.PI/4);add(body,new THREE.BoxGeometry(0.7,0.1,0.7),mb2,0,0.14,0)}
   const rd=new THREE.Mesh((round?new THREE.RingGeometry(0.56,0.68,32):new THREE.RingGeometry(0.62,0.76,4,1).rotateZ(Math.PI/4)).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0x3ee08a,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}));rd.position.y=0.03;g.add(rd);g.userData.ready=rd;
   const tg=new THREE.Mesh(new THREE.RingGeometry(0.74,0.9,4,1).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0xff4d4d,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}));tg.position.y=0.05;g.add(tg);g.userData.tgt=tg;
-  const ring=round?add(new THREE.TorusGeometry(0.34,0.035,6,28),M(col),0,0.2,0):add(new THREE.TorusGeometry(0.48,0.035,4,4),M(col),0,0.2,0);ring.rotation.x=Math.PI/2;if(!round)ring.rotation.z=Math.PI/4;
-  const S=(r,w=14,h=10)=>new THREE.SphereGeometry(r,w,h),BX=(a,b,c)=>new THREE.BoxGeometry(a,b,c);
-  if(d.cls==='A'){
-    if(round){const b=add(S(0.34),M(col),0,0.56,0);b.scale.y=1.35;add(S(0.11,10,8),M(light),-0.3,0.82,0);add(S(0.11,10,8),M(light),0.3,0.82,0);if(idx===1)add(S(0.12,10,8),M(dark),0,1.1,0)}
-    else{const b=add(new THREE.OctahedronGeometry(0.33,0),M(col),0,0.56,0);b.scale.y=1.4;add(new THREE.ConeGeometry(0.09,0.34,4),M(light),-0.3,0.78,0).rotation.z=0.55;add(new THREE.ConeGeometry(0.09,0.34,4),M(light),0.3,0.78,0).rotation.z=-0.55;if(idx===1)add(new THREE.ConeGeometry(0.1,0.3,4),M(dark),0,1.08,0)}}
-  else if(d.cls==='D'){
-    if(round){add(new THREE.CylinderGeometry(0.3,0.36,0.6,20),M(col),0,0.44,0);add(S(0.17,12,8),M(light),-0.36,0.7,0);add(S(0.17,12,8),M(light),0.36,0.7,0);add(S(0.19,14,10),M(dark),0,0.9,0);if(idx===1){const h=add(new THREE.TorusGeometry(0.22,0.035,6,20),M(light),0,1.12,0);h.rotation.x=Math.PI/2}}
-    else{add(BX(0.62,0.6,0.5),M(col),0,0.44,0);add(BX(0.22,0.2,0.5),M(light),-0.4,0.68,0);add(BX(0.22,0.2,0.5),M(light),0.4,0.68,0);add(BX(0.34,0.24,0.34),M(dark),0,0.88,0);if(idx===1)add(BX(0.5,0.1,0.5),M(light),0,1.04,0)}}
-  else if(d.cls==='T'){
-    if(round){add(new THREE.ConeGeometry(0.3,0.95,20),M(col),0,0.6,0);add(S(0.19,12,10),M(light),0,1.2,0);if(idx===1){const v=add(new THREE.TorusGeometry(0.2,0.03,6,18),M(dark),0,1.2,0);v.rotation.x=Math.PI/2}else add(S(0.07,8,6),M(dark),0.32,1.0,0)}
-    else{const c=add(new THREE.ConeGeometry(0.34,0.95,4),M(col),0,0.6,0);c.rotation.y=Math.PI/4;add(new THREE.OctahedronGeometry(0.2,0),M(light),0,1.2,0);if(idx===1)add(BX(0.5,0.05,0.14),M(dark),0,1.2,0.12);else add(new THREE.CylinderGeometry(0.04,0.04,0.7,4),M(dark),0.3,0.75,0).rotation.z=-0.3}}
-  else{
-    if(round){add(S(0.31),M(col),0,0.6,0);const rg=add(new THREE.TorusGeometry(0.4,0.05,6,28),M(light),0,0.6,0);rg.rotation.x=Math.PI/2.3;g.userData.ring=rg;if(idx===1)add(S(0.09,10,8),M(dark),0,1.05,0);else add(S(0.12,10,8),M(light),0,1.06,0)}
-    else{const b=add(BX(0.46,0.46,0.46),M(col),0,0.62,0);b.rotation.set(Math.PI/4,0,Math.PI/4);const rg=add(new THREE.TorusGeometry(0.44,0.05,4,4),M(light),0,0.6,0);rg.rotation.set(Math.PI/2.3,0,Math.PI/4);g.userData.ring=rg;if(idx===1)add(new THREE.CylinderGeometry(0.03,0.03,0.4,4),M(dark),0,1.1,0);else add(new THREE.OctahedronGeometry(0.11,0),M(light),0,1.05,0)}}
-  g.userData.body=body;g.userData.mats=mats;scene.add(g);return g;
+  // ---- figurine (une seule matière)
+  const mf=M(col),BX=(a,b,c)=>new THREE.BoxGeometry(a,b,c);
+  const pose=POSES[d.cls][d.num%3],mir=(d.num%2)?-1:1;             // pose selon le personnage, miroir pour varier
+  const fig=new THREE.Group();fig.position.y=0.19;body.add(fig);const base={};
+  const joint=(x,y,z)=>{const j=new THREE.Group();j.position.set(x,y,z);fig.add(j);return j};
+  const crouch=pose.crouch||0,hipY=0.5-crouch;
+  // jambes
+  const L=joint(0.09,hipY,0),Rr=joint(-0.09,hipY,0);add(L,BX(0.15,0.5-crouch*0.4,0.16),mf,0,-(0.5-crouch*0.4)/2,0);add(Rr,BX(0.15,0.5-crouch*0.4,0.16),mf,0,-(0.5-crouch*0.4)/2,0);
+  // tronc
+  const T=joint(0,hipY,0);add(T,BX(0.34,0.5,0.2),mf,0,0.25,0);T.rotation.x=(pose.lean||0);T.rotation.y=(pose.ty||0)*mir;
+  // tête
+  const H=new THREE.Group();H.position.set(0,0.5,0);T.add(H);add(H,BX(0.32,0.32,0.32),mf,0,0.17,0);H.rotation.y=(pose.hy||0)*mir;
+  add(H,BX(0.26,0.05,0.05),mf,0,0.2,0.17);add(H,BX(0.06,0.09,0.06),mf,0,0.13,0.18);      // visière + nez en relief
+  const hs=d.num%8;
+  if(hs===0)add(H,BX(0.36,0.06,0.36),mf,0,0.36,0);
+  else if(hs===1){for(const x of[-0.09,0,0.09])add(H,BX(0.06,0.12+Math.abs(x)*-0.5,0.06),mf,x,0.4,0)}
+  else if(hs===2)add(H,BX(0.34,0.34,0.06),mf,0,0.17,-0.19);
+  else if(hs===3){add(H,BX(0.06,0.1,0.38),mf,0,0.37,0);add(H,BX(0.36,0.05,0.36),mf,0,0.34,0)}
+  else if(hs===4){for(const s of[-1,1]){const h=add(H,BX(0.06,0.2,0.06),mf,s*0.14,0.42,0);h.rotation.z=-s*0.5}}
+  else if(hs===5){add(H,BX(0.5,0.04,0.5),mf,0,0.35,0);add(H,BX(0.26,0.14,0.26),mf,0,0.44,0)}
+  else if(hs===6){add(H,BX(0.04,0.28,0.04),mf,0.1,0.48,0);add(H,BX(0.1,0.1,0.1),mf,0.1,0.64,0)}
+  else{add(H,BX(0.4,0.2,0.4),mf,0,0.33,0);add(H,BX(0.4,0.3,0.06),mf,0,0.17,-0.2)}
+  // bras (pivots aux épaules)
+  const Lsh=new THREE.Group();Lsh.position.set(0.25,0.42,0);T.add(Lsh);const Rsh=new THREE.Group();Rsh.position.set(-0.25,0.42,0);T.add(Rsh);
+  add(Lsh,BX(0.14,0.5,0.14),mf,0,-0.22,0);add(Rsh,BX(0.14,0.5,0.14),mf,0,-0.22,0);
+  const pl=mir>0?Lsh:Rsh,pr=mir>0?Rsh:Lsh;                             // "gauche/droite" de la pose, inversées en miroir
+  const setArm=(sh,ang,side)=>{sh.rotation.x=ang[0];sh.rotation.z=ang[1]*side};   // side : +1 = bras gauche du modèle (x>0)
+  setArm(pr,pose.ra,pr===Lsh?1:-1);setArm(pl,pose.la,pl===Lsh?1:-1);
+  const setLeg=(lg,ang,side)=>{lg.rotation.x=ang[0];lg.rotation.z=ang[1]*side};
+  const lgl=mir>0?L:Rr,lgr=mir>0?Rr:L;setLeg(lgr,pose.rl,lgr===L?1:-1);setLeg(lgl,pose.ll,lgl===L?1:-1);
+  // détails de classe (même matière)
+  if(d.cls==='A'){add(Lsh,BX(0.2,0.1,0.2),mf,0.02,0.04,0);add(Rsh,BX(0.2,0.1,0.2),mf,-0.02,0.04,0)}
+  if(d.cls==='D'){add(T,BX(0.4,0.34,0.05),mf,0,0.28,0.12);add(T,BX(0.42,0.1,0.24),mf,0,0.47,0)}
+  if(d.cls==='T'){add(T,BX(0.36,0.06,0.22),mf,0,0.03,0)}
+  if(d.cls==='S'){add(T,BX(0.3,0.44,0.03),mf,0,0.27,-0.12)}
+  // accessoires
+  const pr_=pose.prop;
+  if(pr_==='sword'){add(pr,BX(0.06,0.7,0.06),mf,0,-0.75,0);add(pr,BX(0.26,0.06,0.08),mf,0,-0.45,0)}
+  else if(pr_==='shield'){add(pl,BX(0.4,0.48,0.06),mf,0,-0.3,0.12)}
+  else if(pr_==='bow'){add(pl,BX(0.05,0.62,0.05),mf,0,-0.5,0.02);const a=add(pl,BX(0.05,0.3,0.05),mf,0,-0.22,0.1);a.rotation.x=0.5;const b=add(pl,BX(0.05,0.3,0.05),mf,0,-0.78,0.1);b.rotation.x=-0.5}
+  else if(pr_==='quiver'){add(T,BX(0.12,0.4,0.12),mf,0.1,0.28,-0.16)}
+  else if(pr_==='staff'){add(fig,BX(0.06,1.5,0.06),mf,mir*0.36,0.75,0.2);add(fig,BX(0.14,0.14,0.14),mf,mir*0.36,1.55,0.2)}
+  else if(pr_==='book'){add(T,BX(0.24,0.04,0.17),mf,0,0.15,0.2)}
+  g.userData.body=body;g.userData.mats=mats;g.userData.parts={ll:lgl,rl:lgr,la:pl,ra:pr,head:H,torso:T};
+  g.userData.base={ll:lgl.rotation.x,rl:lgr.rotation.x,la:pl.rotation.x,ra:pr.rotation.x,hy:H.rotation.y};
+  scene.add(g);return g;
 }
 
 /* animations */
@@ -661,9 +744,9 @@ const feet=u=>u.mesh.position.clone().setY(u.mesh.position.y+.08),chest=u=>u.mes
 function faceTo(u,t){const dx=t.c-u.c,dz=t.r-u.r;if(dx||dz)u.faceY=Math.atan2(dx,dz)}
 function hop(u,h=.25,dur=.28){return tween(dur,k=>{u.mesh.userData.body.position.y=Math.sin(k*Math.PI)*h;u.squash=-.15*Math.sin(k*Math.PI)})}
 function stepTweens(dt){for(let i=tweens.length-1;i>=0;i--){const w=tweens[i];w.t+=dt;const k=Math.min(1,w.t/w.dur);w.fn(k);if(k>=1){tweens.splice(i,1);w.res()}}}
-async function walk(u,path){for(const [c,r] of path){const a=u.mesh.position.clone(),b=cellPos(c,r);camFocus([b],{min:.8});faceTo(u,{c,r});
+async function walk(u,path){u.walking=true;for(const [c,r] of path){const a=u.mesh.position.clone(),b=cellPos(c,r);camFocus([b],{min:.8});faceTo(u,{c,r});
     await tween(.15,k=>{u.mesh.position.lerpVectors(a,b,k);u.mesh.position.y+=Math.sin(k*Math.PI)*.24;u.squash=-.2*Math.sin(k*Math.PI)});
-    u.c=c;u.r=r;u.squash=.3;burst(feet(u),0x9aa3c0,4,{speed:.9,up:.7,size:.07,life:.4,g:4})}}
+    u.c=c;u.r=r;u.squash=.3;burst(feet(u),0x9aa3c0,4,{speed:.9,up:.7,size:.07,life:.4,g:4})}u.walking=false}
 async function teleport(u,cell){camFocus([u,cell],{min:.68});burst(chest(u),0xb7a0ff,14,{speed:1.6,up:2.4,g:1});ringFx(u.mesh.position,0xb7a0ff,1.2);
   await tween(.16,k=>{u.mesh.scale.set(1-k,1+k*.8,1-k)});u.c=cell.c;u.r=cell.r;u.mesh.position.copy(cellPos(cell.c,cell.r));
   burst(chest(u),0xb7a0ff,14,{speed:1.6,up:2.4,g:1});ringFx(u.mesh.position,0xb7a0ff,1.2);
@@ -672,12 +755,12 @@ async function teleport(u,cell){camFocus([u,cell],{min:.68});burst(chest(u),0xb7
 const shake=u=>tween(.35,k=>{u.mesh.userData.body.position.x=Math.sin(k*40)*(1-k)*.12;});
 async function lunge(a,t){faceTo(a,t);const p=a.mesh.position.clone(),q=t.mesh.position.clone().sub(p).setY(0).normalize();
   await tween(.14,k=>{a.mesh.position.copy(p).addScaledVector(q,-.22*ease.out(k));a.squash=.2*k});          // armé
-  await tween(.07,k=>{a.mesh.position.copy(p).addScaledVector(q,-.22+.7*k);a.squash=.2-.5*k});                // frappe
+  await tween(.07,k=>{a.mesh.position.copy(p).addScaledVector(q,-.22+.7*k);a.squash=.2-.5*k;a.atkA=1});                // frappe
   return tween(.16,k=>{a.mesh.position.copy(p).addScaledVector(q,.48*(1-ease.out(k)))})}
 function impact(t,big){t.flash=1;hitStop(big?.12:.08);shakeCam(big?.5:.3);burst(chest(t),0xffd27a,16,{speed:3,up:2.6,size:.13,life:.5});burst(chest(t),0xff5a4a,8,{speed:2,up:2,size:.1});ringFx(t.mesh.position,0xffffff,1.3,.35)}
 
 /* ============ LOGIQUE : UNITÉS, EFFETS, DÉGÂTS ============ */
-function spawnUnit(d,team,c,r){const u={id:G.nid++,d,team,c,r,hp:4,alive:true,played:false,effect:null,buffs:[],timers:[],flags:{},freeAtk:0,squash:0,flash:0,faceY:team===0?Math.PI:0};
+function spawnUnit(d,team,c,r){const u={id:G.nid++,d,team,c,r,hp:4,alive:true,played:false,effect:null,buffs:[],timers:[],flags:{},freeAtk:0,squash:0,flash:0,walkA:0,atkA:0,walking:false,faceY:team===0?Math.PI:0};
   u.mesh=buildUnit(d,team);u.mesh.position.copy(cellPos(c,r));u.mesh.rotation.y=u.faceY;G.units.push(u);return u}
 async function dropIn(u){const to=cellPos(u.c,u.r);u.mesh.position.y=5;u.mesh.scale.set(.8,1.3,.8);
   await tween(.5,k=>{u.mesh.position.y=to.y+(1-ease.bounce(k))*5;u.mesh.scale.set(1,1,1)});u.squash=.4;burst(feet(u),u.team?0x8a90aa:0xffffff,10,{speed:1.6,up:1.2,size:.09,life:.5,g:5});ringFx(to,u.team?0x8a90aa:0xffffff,1.2);shakeCam(.12)}
@@ -686,7 +769,7 @@ const toast=(m)=>{if(G.fast)return;const t=$('#toast');t.textContent=m;t.classLi
 const v3=new THREE.Vector3();
 function screenOf(pos,dy=0){v3.copy(pos);v3.y+=dy;v3.project(cam);return[(v3.x*.5+.5)*innerWidth,(-v3.y*.5+.5)*innerHeight]}
 function pop(u,text,color='#fff'){if(G.fast)return;const el=document.createElement('div');el.className='flt';el.textContent=text;el.style.color=color;
-  const [x,y]=screenOf(u.mesh.position,1.2);el.style.left=x+'px';el.style.top=y+'px';$('#float').appendChild(el);setTimeout(()=>el.remove(),1400)}
+  const [x,y]=screenOf(u.mesh.position,1.75);el.style.left=x+'px';el.style.top=y+'px';$('#float').appendChild(el);setTimeout(()=>el.remove(),1400)}
 function addBuff(u,k,v,until,src){u.buffs.push({k,v,until,src:src.id});ringFx(u.mesh.position,BUFFCOL[k]||0xffffff,1.1,.5);burst(feet(u),BUFFCOL[k]||0xffffff,6,{speed:.5,up:2.4,g:-1.5,size:.08,life:.8});hop(u,.16,.24);refresh()}
 function heal(u,n){const b=u.hp;u.hp=Math.min(4,u.hp+n);if(u.hp>b){pop(u,'+'+(u.hp-b)+' PV','#5fe0a5');burst(feet(u),0x5fe0a5,12,{speed:.7,up:2.6,g:-2,size:.1,life:.9});ringFx(u.mesh.position,0x5fe0a5,1.2,.5);hop(u,.2,.3);log(`${u.d.name} récupère ${u.hp-b} PV`);if(u.effect&&u.effect.type==='toxic')u.effect=null}refresh()}
 function cleanse(u){if(u.effect){pop(u,'Purgé','#5fe0a5');u.effect=null}refresh()}
@@ -751,13 +834,18 @@ function reachable(u){
 function pathTo(u,reach,dest){const p=[];let k=KEY(dest.c,dest.r);while(k&&k!==KEY(u.c,u.r)){const n=reach.get(k);p.unshift([n.c,n.r]);k=n.prev}return p}
 const DIRS8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 const affects=(u,x,s)=>s.aff==='all'?x!==u:s.aff==='allies'?x.team===u.team:x.team!==u.team;
-function lineCellsDir(u,d,len){const o=[];let c=u.c,r=u.r;for(let i=0;i<len;i++){c+=d[0];r+=d[1];if(c<0||r<0||c>=N||r>=N)break;o.push({c,r})}return o}
-function lineUnits(u,s,d){const o=[];for(const ce of lineCellsDir(u,d,s.len)){const x=unitAt(ce.c,ce.r);if(x&&x!==u&&affects(u,x,s))o.push(x)}return o}
+function lineCellsDir(u,d,len,w=0){const o=[];let c=u.c,r=u.r;for(let i=0;i<len;i++){c+=d[0];r+=d[1];if(c<0||r<0||c>=N||r>=N)break;o.push({c,r});for(let k=1;k<=w;k++)for(const sg of[-1,1]){const cc=c+(d[0]===0?sg*k:0),rr=r+(d[1]===0?sg*k:0);if(d[0]!==0&&d[1]!==0)continue;if(cc>=0&&rr>=0&&cc<N&&rr<N)o.push({c:cc,r:rr})}}return o}
+function lineUnits(u,s,d){const o=[];for(const ce of lineCellsDir(u,d,s.len,s.w)){const x=unitAt(ce.c,ce.r);if(x&&x!==u&&affects(u,x,s))o.push(x)}return o}
 const lineDirs=(u,s)=>(s.diag?DIRS8:DIRS).filter(d=>lineUnits(u,s,d).length);
 function dirFromCell(u,s,c,r){const dc=c-u.c,dr=r-u.r;if(!dc&&!dr)return null;let d=null;
   if(!dr)d=[Math.sign(dc),0];else if(!dc)d=[0,Math.sign(dr)];else if(s.diag&&Math.abs(dc)===Math.abs(dr))d=[Math.sign(dc),Math.sign(dr)];
   return d&&Math.max(Math.abs(dc),Math.abs(dr))<=s.len?d:null}
-function zoneCells(c,r,rad,shape){const o=[];for(let dr=-rad;dr<=rad;dr++)for(let dc=-rad;dc<=rad;dc++){if(shape==='cross'&&Math.abs(dc)+Math.abs(dr)>rad)continue;const cc=c+dc,rr=r+dr;if(cc<0||rr<0||cc>=N||rr>=N)continue;o.push({c:cc,r:rr})}return o}
+function zoneCells(c,r,rad,shape){const o=[];
+  if(shape==='col'||shape==='col3'||shape==='comb'){const cols=shape==='col'?[c]:shape==='col3'?[c-1,c,c+1]:[c-2,c,c+2];for(const cc of cols)if(cc>=0&&cc<N)for(let rr=0;rr<N;rr++)o.push({c:cc,r:rr});return o}
+  if(shape==='row'||shape==='row3'||shape==='rowcomb'){const rows=shape==='row'?[r]:shape==='row3'?[r-1,r,r+1]:[r-2,r,r+2];for(const rr of rows)if(rr>=0&&rr<N)for(let cc=0;cc<N;cc++)o.push({c:cc,r:rr});return o}
+  for(let dr=-rad;dr<=rad;dr++)for(let dc=-rad;dc<=rad;dc++){const ad=Math.abs(dc),ar=Math.abs(dr);
+    if(shape==='cross'&&ad+ar>rad)continue;if(shape==='x'&&ad!==ar)continue;if(shape==='ring'&&Math.max(ad,ar)!==rad)continue;if(shape==='plus'&&dc!==0&&dr!==0)continue;if(shape==='h'&&dr!==0)continue;if(shape==='v'&&dc!==0)continue;
+    const cc=c+dc,rr=r+dr;if(cc<0||rr<0||cc>=N||rr>=N)continue;o.push({c:cc,r:rr})}return o}
 const zoneUnits=(u,s,c,r)=>zoneCells(c,r,s.rad,s.shape).map(ce=>unitAt(ce.c,ce.r)).filter(x=>x&&x!==u&&(affects(u,x,s)||(s.ff&&x.team===u.team)));
 const zoneValid=(u,s,c,r)=>cheb(u,{c,r})<=s.range&&(s.empty||zoneUnits(u,s,c,r).some(x=>s.ff?x.team!==u.team:true));
 const deadAllies=u=>G.units.filter(x=>!x.alive&&x.team===u.team&&!x.revived);
@@ -767,12 +855,13 @@ function bestHit(u,s){if(s.t==='line')return Math.max(0,...lineDirs(u,s).map(d=>
 function targetsFor(u,s){
   if(s.passive)return[];
   if(s.need&&!s.need(u))return[];
-  if(s.t==='line'){const o=[];for(const d of lineDirs(u,s))o.push(...lineCellsDir(u,d,s.len));return o}
+  if(s.t==='line'){const o=[];for(const d of lineDirs(u,s))o.push(...lineCellsDir(u,d,s.len,s.w));return o}
   if(s.t==='zone'){const o=[];for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(zoneValid(u,s,c,r))o.push({c,r});return o}
   if(s.t==='multi')return targetsFor(u,{...s,t:s.aff==='allies'?'ally':'enemy'});
   if(s.t==='enemy')return alive(1-u.team).filter(t=>s.far?(cheb(u,t)<=s.far&&(!s.adj||freeAdj(t).length)&&(!s.adjSelf||freeAdj(u).length)):rangeState(u,t)===1);
   if(s.t==='ally')return alive(u.team).filter(t=>t===u||cheb(u,t)<=stat(u,'pre')+(isStruct(u.c,u.r)?1:0));
   if(s.t==='cell'){const o=[],cr=typeof s.cell==='function'?s.cell(u):s.cell;for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(!unitAt(c,r)&&cheb(u,{c,r})<=cr)o.push({c,r});return o}
+  if(s.pick)return s.pick(u);
   const rad=typeof s.rad==='function'?s.rad(u):s.rad;
   const pool=s.aoe==='enemies'?alive(1-u.team):s.aoe==='allies'?alive(u.team):[u];return pool.filter(t=>cheb(u,t)<=rad)}
 
@@ -899,7 +988,7 @@ function recalc(){G.hl=new Map();G.solo=new Set();G.tmark=new Map();G.tcount=nul
     for(const c of areaCells(u,{t:'ally'}))if(!G.hl.has(c))G.hl.set(c,'rngB')}
   else if((G.mode==='abl'||G.mode==='ult')&&['line','zone'].includes((G.mode==='abl'?u.d.ab:u.d.ul).t)){
     const s=G.mode==='abl'?u.d.ab:u.d.ul,ts=targetsFor(u,s);G.tcount=s.t==='line'?lineDirs(u,s).length:bestHit(u,s);
-    if(s.t==='line'){for(const d of lineDirs(u,s)){for(const ce of lineCellsDir(u,d,s.len)){const k=KEY(ce.c,ce.r);if(!G.hl.has(k))G.hl.set(k,'rngB');const x=unitAt(ce.c,ce.r);if(x&&x!==u&&affects(u,x,s))G.tmark.set(x.id,s.aff==='allies'?'ally':'abl')}}}
+    if(s.t==='line'){for(const d of lineDirs(u,s)){for(const ce of lineCellsDir(u,d,s.len,s.w)){const k=KEY(ce.c,ce.r);if(!G.hl.has(k))G.hl.set(k,'rngB');const x=unitAt(ce.c,ce.r);if(x&&x!==u&&affects(u,x,s))G.tmark.set(x.id,s.aff==='allies'?'ally':'abl')}}}
     else for(const ce of ts)G.hl.set(KEY(ce.c,ce.r),'rngB')}
   else if(G.mode==='abl'||G.mode==='ult'){const s=G.mode==='abl'?u.d.ab:u.d.ul,ts=targetsFor(u,s);G.tcount=ts.length;
     const kind=s.t==='ally'||(s.t==='none'&&s.aoe!=='enemies')?'ally':'abl';
@@ -909,7 +998,7 @@ function recalc(){G.hl=new Map();G.solo=new Set();G.tmark=new Map();G.tcount=nul
   refreshPreview();paintHL()}
 function refreshPreview(){G.pv={hl:new Map(),mark:new Map()};const u=G.sel;if(!u||G.phase!=='play')return;
   const s=G.mode==='abl'?u.d.ab:G.mode==='ult'?u.d.ul:null;if(!s)return;const{c,r}=G.cur;
-  if(s.t==='line'){const d=dirFromCell(u,s,c,r);if(d&&lineUnits(u,s,d).length){for(const ce of lineCellsDir(u,d,s.len))G.pv.hl.set(KEY(ce.c,ce.r),'abl');for(const x of lineUnits(u,s,d))G.pv.mark.set(x.id,s.aff==='allies'?'ally':x.team===u.team?'warn':'abl')}}
+  if(s.t==='line'){const d=dirFromCell(u,s,c,r);if(d&&lineUnits(u,s,d).length){for(const ce of lineCellsDir(u,d,s.len,s.w))G.pv.hl.set(KEY(ce.c,ce.r),'abl');for(const x of lineUnits(u,s,d))G.pv.mark.set(x.id,s.aff==='allies'?'ally':x.team===u.team?'warn':'abl')}}
   else if(s.t==='zone'&&zoneValid(u,s,c,r)){for(const ce of zoneCells(c,r,s.rad,s.shape))G.pv.hl.set(KEY(ce.c,ce.r),s.hazard?'atk':'abl');for(const x of zoneUnits(u,s,c,r))G.pv.mark.set(x.id,x.team===u.team?(s.aff==='allies'?'ally':'warn'):'abl')}}
 
 /* ============ HUD ============ */
@@ -977,7 +1066,7 @@ function renderDock(){
   acts.querySelectorAll('button').forEach(b=>b.onclick=()=>command(b.dataset.cmd));
   pips.innerHTML=`Actions : ${[0,1].map(i=>`<span class="pip ${i<G.actions?'':'off'}"></span>`).join('')}${u.freeAtk>0?` · Blitz : ${u.freeAtk} attaque(s) gratuite(s)`:''}${u.buffs.length?' · Bonus : '+u.buffs.map(b=>`${b.v>0?'+':''}${b.v} ${b.k.toUpperCase()}`).join(', '):''}`;
   const hand=G.hand[u.team];cards.innerHTML=hand.map((c,i)=>`<div class="card ${G.mode==='card'&&i===G.cardIdx?'cur':''}"><b>${c.n}</b><br>${c.x}</div>`).join('')}
-function renderBadges(){const el=$('#badges');let h='';for(const u of G.units){if(!u.alive||!u.mesh.visible)continue;const[x,y]=screenOf(u.mesh.position,1.35);
+function renderBadges(){const el=$('#badges');let h='';for(const u of G.units){if(!u.alive||!u.mesh.visible)continue;const[x,y]=screenOf(u.mesh.position,1.9);
   const tm=G.pv.mark.get(u.id)||(G.tmark&&G.tmark.get(u.id)),tag=tm&&tm!=='hint'?`<div class="tg ${tm}">${tm==='atk'?'⚔ Attaquable':tm==='ally'?'✚ Allié concerné':tm==='warn'?'⚠ Allié touché':'✦ Ennemi concerné'}</div>`:'';
   h+=`<div class="badge t${u.team}" style="left:${x}px;top:${y}px">${tag}<div class="hp">${hearts(u)}</div><span class="nm">${u.effect?`<span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span> `:''}${u.timers.length?`<span class="fxi">${timerIcon(u)}</span> `:''}${u.d.name}</span></div>`}
   for(const z of G.zones){const ks=[...z.keys].map(k=>k.split(',').map(Number)),cx=ks.reduce((a,b)=>a+b[0],0)/ks.length,cz=ks.reduce((a,b)=>a+b[1],0)/ks.length,[x,y]=screenOf(new THREE.Vector3(cx-OFF,.3,cz-OFF));
@@ -1090,7 +1179,7 @@ async function botAbility(u,isUlt){
   if(s.t==='enemy')tg=pickR(ts);
   else if(s.t==='ally'){const w=ts.slice().sort((a,b)=>a.hp-b.hp)[0];if(w.hp>=4&&!w.effect&&Math.random()<.7)return false;tg=w}
   else if(s.t==='cell'){const foe=alive(0).sort((a,b)=>cheb(u,a)-cheb(u,b))[0];tg=Math.random()<.3?pickR(ts):ts.slice().sort((a,b)=>cheb(a,foe)-cheb(b,foe))[0]}
-  else if(s.t==='line'){const d=pickR(lineDirs(u,s));tg={dir:d,cells:lineCellsDir(u,d,s.len),units:lineUnits(u,s,d)}}
+  else if(s.t==='line'){const d=pickR(lineDirs(u,s));tg={dir:d,cells:lineCellsDir(u,d,s.len,s.w),units:lineUnits(u,s,d)}}
   else if(s.t==='zone'){const foe=alive(0).sort((a,b)=>cheb(u,a)-cheb(u,b))[0];
     const sc=ce=>s.empty?-cheb(ce,foe):zoneUnits(u,s,ce.c,ce.r).reduce((a,x)=>a+(x.team===u.team?-2:1),0);
     const ce=ts.slice().sort((a,b)=>sc(b)-sc(a))[0];if(!s.empty&&sc(ce)<=0)return false;tg={c:ce.c,r:ce.r,cells:zoneCells(ce.c,ce.r,s.rad,s.shape),units:zoneUnits(u,s,ce.c,ce.r)}}
@@ -1127,7 +1216,7 @@ async function confirmAct(){
   else if(G.mode==='heal'){if(t&&h==='ally')return doHeal(t)}
   else if(G.mode==='abl'||G.mode==='ult'){const isU=G.mode==='ult',s=isU?u.d.ul:u.d.ab;
     if(s.t==='none')return doAbility(isU,targetsFor(u,s));
-    if(s.t==='line'){const d=dirFromCell(u,s,c,r);if(d&&lineUnits(u,s,d).length)return doAbility(isU,{dir:d,cells:lineCellsDir(u,d,s.len),units:lineUnits(u,s,d)});toast('Choisis une case alignée avec des cibles');return}
+    if(s.t==='line'){const d=dirFromCell(u,s,c,r);if(d&&lineUnits(u,s,d).length)return doAbility(isU,{dir:d,cells:lineCellsDir(u,d,s.len,s.w),units:lineUnits(u,s,d)});toast('Choisis une case alignée avec des cibles');return}
     if(s.t==='zone'){if(zoneValid(u,s,c,r))return doAbility(isU,{c,r,cells:zoneCells(c,r,s.rad,s.shape),units:zoneUnits(u,s,c,r)});toast('Centre hors de portée ou sans cible');return}
     if(s.t==='multi'){const ts=targetsFor(u,s),cur=t&&ts.includes(t)?t:null,go=()=>{const l=G.multi.slice();G.multi=[];return doAbility(isU,l)};
       if(cur&&G.multi.includes(cur))return go();
@@ -1236,7 +1325,7 @@ function netLog(a){if(!G.online||NET.replaying||!NET.db)return;const n=++NET.seq
   NET.db.doc(`rooms/${NET.code}/moves/m${String(n).padStart(6,'0')}`).set({n,t:G.myTeam,a,ts:Date.now()}).catch(netErr)}
 function serTarget(s,tg){switch(s.t){case'enemy':case'ally':return tg.id;case'cell':case'zone':return[tg.c,tg.r];case'line':return tg.dir;case'multi':return tg.map(x=>x.id)}return null}
 function deserTarget(u,s,p){switch(s.t){case'none':return targetsFor(u,s);case'enemy':case'ally':return byId(p);case'cell':return{c:p[0],r:p[1]};
-  case'line':return{dir:p,cells:lineCellsDir(u,p,s.len),units:lineUnits(u,s,p)};
+  case'line':return{dir:p,cells:lineCellsDir(u,p,s.len,s.w),units:lineUnits(u,s,p)};
   case'zone':return{c:p[0],r:p[1],cells:zoneCells(p[0],p[1],s.rad,s.shape),units:zoneUnits(u,s,p[0],p[1])};case'multi':return p.map(byId)}return null}
 async function applyNet(a){NET.replaying=true;
   try{switch(a.k){
@@ -1488,7 +1577,9 @@ function frame(now){const raw=Math.min(.05,(now-last)/1000);last=now;const t=now
     const br=Math.sin(t*2.2+u.id)*.025,sq=u.squash+br;b.scale.set(1+sq*.55,1-sq,1+sq*.55);
     if(sel&&!G.busy)b.position.y=Math.abs(Math.sin(t*4))*.07;else if(!tweens.length)b.position.y*=Math.exp(-raw*10);
     if(!sel&&!tweens.length)b.position.x*=Math.exp(-raw*10);
-    if(u.mesh.userData.ring)u.mesh.userData.ring.rotation.z=t*1.5;
+    {const P=u.mesh.userData.parts,B0=u.mesh.userData.base;if(P){u.walkA+=((u.walking?1:0)-u.walkA)*(1-Math.exp(-raw*10));u.atkA*=Math.exp(-raw*6);
+      const sw=Math.sin(t*16)*.8*u.walkA,idle=Math.sin(t*1.7+u.id)*.03;
+      P.ll.rotation.x=B0.ll+sw;P.rl.rotation.x=B0.rl-sw;P.la.rotation.x=B0.la-sw*.5+idle;P.ra.rotation.x=B0.ra+sw*.5-1.5*u.atkA+idle;P.head.rotation.y=B0.hy+Math.sin(t*.9+u.id)*.08}}
     let da=u.faceY-u.mesh.rotation.y;da=Math.atan2(Math.sin(da),Math.cos(da));u.mesh.rotation.y+=da*(1-Math.exp(-raw*14));
     const rdy=G.phase==='play'&&u.team===G.turnPlayer&&!u.played&&!sel&&ctl(u.team);
     const tm=G.pv.mark.get(u.id)||(G.tmark&&G.tmark.get(u.id)),tr=u.mesh.userData.tgt;if(tm)tr.material.color.setHex(TMC[tm]);
