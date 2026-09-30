@@ -75,7 +75,7 @@ kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;bo
 .drow .sum{font-family:var(--mono);font-size:20px;min-width:34px;text-align:right}
 .verdict{text-align:center;font-weight:700;margin-top:4px;color:var(--amber)}
 
-#overlay{position:absolute;inset:0;background:#0a0c14ec;overflow:auto;padding:18px 16px;display:none}
+#overlay{position:absolute;inset:0;z-index:20;background:#0a0c14;overflow:auto;padding:18px 16px;display:none}
 #overlay.on{display:block}
 .ov{max-width:1180px;margin:0 auto}
 .ov h1{margin:0;font-size:30px;letter-spacing:.1em;text-transform:uppercase}
@@ -92,6 +92,26 @@ kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;bo
 .dc p{margin:3px 0 0;color:var(--mut)} .dc p b{color:var(--txt)}
 .ovbar{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;color:var(--mut);font-size:13px}
 .big{font-size:44px;font-weight:700;margin:60px 0 10px;text-align:center}
+
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:20px 0}
+.mode{background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:18px 20px;cursor:pointer}
+.mode.sel{border-color:var(--amber)} .mode h2{margin:0 0 6px;font-size:20px;display:flex;gap:10px;align-items:center} .mode p{margin:0;color:var(--mut)}
+.ov.pk{display:flex;flex-direction:column;height:100%;max-width:1200px}
+.pkhead h1{font-size:22px;margin-bottom:8px}
+.slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:8px}
+.slot{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--cc);border-radius:6px;padding:4px 10px;display:flex;flex-direction:column;min-width:0}
+.slot small{color:var(--cc);font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:10px} .slot b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .slot.empty{color:var(--mut)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px} .grow{flex:1}
+.tab{font:inherit;font-weight:600;background:var(--panel);color:var(--txt);border:1px solid var(--line);border-bottom:3px solid var(--cc);border-radius:6px;padding:5px 12px;cursor:pointer;display:flex;gap:6px;align-items:center}
+.tab.on{background:var(--panel2);border-color:var(--amber);border-bottom-color:var(--cc)}
+.pgrid{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;align-content:start;padding:2px}
+.pc{background:var(--panel);border:2px solid transparent;border-left:4px solid var(--cc);border-radius:8px;padding:6px 9px;cursor:pointer;display:flex;flex-direction:column;position:relative;min-width:0}
+.pc b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .pc small{color:var(--mut);font-size:11px}
+.pc.cur{border-color:var(--amber);background:var(--panel2)} .pc.mine{box-shadow:inset 0 0 0 2px var(--T)} .pc.gone{opacity:.35}
+.pc em{position:absolute;top:5px;right:8px;font-size:10px;font-style:normal;color:var(--amber);font-weight:700}
+.sv{display:flex;gap:10px;font-family:var(--mono);font-weight:700;font-size:13px;margin-top:2px} .sv i{font-style:normal}
+.pinfo{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--cc);border-radius:8px;padding:8px 12px;margin-top:8px}
+.pinfo h3{margin:0 0 3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap} .stars{color:var(--amber);font-size:12px;letter-spacing:1px}
 @media (min-width:1101px){#dock{width:min(820px,calc(100% - 540px))}}
 @media (max-width:1100px){.roster{display:none}#keys{display:none}}
 @media (max-width:700px){#log{display:none}#dock{grid-template-columns:1fr}#acts{justify-content:flex-start}}
@@ -129,50 +149,70 @@ const cheb=(a,b)=>Math.max(Math.abs(a.c-b.c),Math.abs(a.r-b.r));
 const cellName=(c,r)=>String.fromCharCode(65+c)+(r+1);
 const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 
-/* 8 personnages : 2 par classe, un par sous-classe de la variante */
-const CHARS=[
- {id:'kaelen',name:'Kaelen',cls:'A',sub:'Brawler',atk:4,def:1,hab:2,pre:2,
-  ab:{n:'Souffle ardent',t:'enemy',x:'Cible à portée, d6 : 4-6 Brûlé, 6 = −1 PV en plus.',
-      run:async(u,t)=>{const r=d6();pop(t,'d6 : '+r,'#ffb42e');log(`${u.d.name} lance un d6 : <span class="r">${r}</span>`);if(r>=4)await addEff(t,'burn',u);if(r===6)await dmg(t,1,u)}},
-  ul:{n:'Inferno',t:'none',aoe:'enemies',rad:u=>stat(u,'pre')+1,x:'Tous les ennemis à PRE+1 : Brûlés et −1 PV.',
-      run:async(u,list)=>{for(const t of list){await addEff(t,'burn',u);await dmg(t,1,u)}}}},
- {id:'nyx',name:'Nyx',cls:'A',sub:'Performer',atk:3,def:2,hab:4,pre:1,
-  ab:{n:'Ruée',t:'cell',cell:3,x:'Se téléporte à ≤3 cases. d6 : 4-6 = +1 ATK ce tour.',
-      run:async(u,cell)=>{await teleport(u,cell);let r=d6();if(G.variant&&u.flags.rerollAb){u.flags.rerollAb=false;r=Math.max(r,d6());log('Performer : relance conservée')}
+/* Personnages : stats issues de Projet-Cards.csv (cartes dont les stats sont renseignées).
+   Capacités et ultimes : improvisés par rôle, une variante choisie par personnage. */
+const ROLE_CLS={Brawler:'A',Performer:'A',Protector:'D',Juggernaut:'D',Ranger:'T',Flanker:'T',Assist:'S',Engineer:'S'};
+const rollPop=(u,t)=>{const r=d6();pop(t,'d6 : '+r,'#ffb42e');log(`${u.d.name} lance un d6 : <span class="r">${r}</span>`);return r};
+const ENM=(n,x,rad,fn)=>({n,t:'none',aoe:'enemies',rad,x,run:async(u,l)=>{for(const t of l)await fn(u,t)}});
+const ALY=(n,x,rad,fn)=>({n,t:'none',aoe:'allies',rad,x,run:async(u,l)=>{for(const a of l)await fn(u,a)}});
+const SELF=(n,x,fn)=>({n,t:'none',aoe:'self',rad:0,x,run:fn});
+const TGT=(n,x,fn,o={})=>({n,t:'enemy',x,run:fn,...o});
+const dashHit=async(u,t,b=0)=>{await teleport(u,freeAdj(t)[0]);if(b)addBuff(u,'atk',b,'self',u);return combat(u,t)};
+const PRE1=u=>stat(u,'pre')+1;
+const LIB={
+ Brawler:{
+  ab:[TGT('Souffle ardent','Cible à portée, d6 : 4-6 Brûlé, 6 = −1 PV en plus.',async(u,t)=>{const r=rollPop(u,t);if(r>=4)await addEff(t,'burn',u);if(r===6)await dmg(t,1,u)}),
+      TGT('Coup de tonnerre','Cible à portée, d6 : 4-6 Assommé.',async(u,t)=>{if(rollPop(u,t)>=4)await addEff(t,'stun',u)}),
+      TGT('Charge','Se téléporte au contact d\'un ennemi à ≤4 cases et combat.',(u,t)=>dashHit(u,t),{far:4,adj:true})],
+  ul:[ENM('Inferno','Ennemis à PRE+1 : Brûlés et −1 PV.',PRE1,async(u,t)=>{await addEff(t,'burn',u);await dmg(t,1,u)}),
+      SELF('Rage','+1 ATK ce tour et 2 attaques gratuites.',async u=>{u.freeAtk=2;addBuff(u,'atk',1,'self',u);pop(u,'RAGE','#ff9a5a')})]},
+ Performer:{
+  ab:[{n:'Ruée',t:'cell',cell:3,x:'Se téléporte à ≤3 cases. d6 : 4-6 = +1 ATK ce tour.',run:async(u,c)=>{await teleport(u,c);let r=d6();if(G.variant&&u.flags.rerollAb){u.flags.rerollAb=false;r=Math.max(r,d6())}
         log(`${u.d.name} lance un d6 : <span class="r">${r}</span>`);if(r>=4){addBuff(u,'atk',1,'self',u);pop(u,'+1 ATK','#ff9a5a')}}},
-  ul:{n:'Blitz',t:'none',aoe:'self',rad:0,x:'Cette attaque et la suivante ne coûtent aucune action (2 attaques gratuites).',
-      run:async(u)=>{u.freeAtk=2;pop(u,'BLITZ','#ff9a5a')}}},
- {id:'bastion',name:'Bastion',cls:'D',sub:'Protector',atk:1,def:4,hab:2,pre:2,
-  ab:{n:'Rempart',t:'none',aoe:'allies',rad:2,x:'Alliés à ≤2 cases (lui compris) : +1 DEF jusqu\'à son prochain tour.',
-      run:async(u,list)=>{for(const a of list){addBuff(a,'def',1,'turn',u);pop(a,'+1 DEF','#6aa8ff')}}},
-  ul:{n:'Forteresse',t:'none',aoe:'allies',rad:99,x:'Tous les alliés : +2 DEF jusqu\'à son prochain tour. Il se soigne de 1 PV.',
-      run:async(u,list)=>{for(const a of list){addBuff(a,'def',2,'turn',u);pop(a,'+2 DEF','#6aa8ff')}heal(u,1)}}},
- {id:'golem',name:'Golem',cls:'D',sub:'Juggernaut',atk:2,def:4,hab:1,pre:1,
-  ab:{n:'Séisme',t:'none',aoe:'enemies',rad:u=>stat(u,'pre')+1,x:'Ennemis à PRE+1 : Engourdis (pas de déplacement).',
-      run:async(u,list)=>{for(const t of list)await addEff(t,'numb',u)}},
-  ul:{n:'Écrasement',t:'none',aoe:'enemies',rad:u=>stat(u,'pre')+1,x:'Ennemis à PRE+1 : Assommés et −1 PV.',
-      run:async(u,list)=>{for(const t of list){await addEff(t,'stun',u);await dmg(t,1,u)}}}},
- {id:'sable',name:'Sable',cls:'T',sub:'Ranger',atk:2,def:1,hab:2,pre:4,
-  ab:{n:'Marque',t:'enemy',x:'Cible à portée : −1 DEF jusqu\'au prochain tour de Sable.',
-      run:async(u,t)=>{addBuff(t,'def',-1,'turn',u);pop(t,'−1 DEF','#5fe0a5')}},
-  ul:{n:'Tir fatal',t:'enemy',far:6,x:'Cible à ≤6 cases (sans obstacle) : −2 PV, sans jet.',
-      run:async(u,t)=>{await dmg(t,2,u)}}},
- {id:'wisp',name:'Wisp',cls:'T',sub:'Flanker',atk:2,def:2,hab:3,pre:2,
-  ab:{n:'Clignotement',t:'cell',cell:4,x:'Se téléporte sur une case libre à ≤4 cases.',
-      run:async(u,cell)=>{await teleport(u,cell)}},
-  ul:{n:'Frappe venimeuse',t:'enemy',far:5,adj:true,x:'Se téléporte au contact d\'un ennemi à ≤5 cases, +1 ATK, combat. Si touché : Toxique.',
-      run:async(u,t)=>{const c=freeAdj(t)[0];await teleport(u,c);addBuff(u,'atk',1,'self',u);const res=await combat(u,t);if(res==='hit')await addEff(t,'toxic',u)}}},
- {id:'halo',name:'Halo',cls:'S',sub:'Assist',atk:1,def:2,hab:3,pre:3,
-  ab:{n:'Soin',t:'ally',x:'Allié à portée (ou soi) : +1 PV et retire son effet.',
-      run:async(u,t)=>{heal(t,1);cleanse(t)}},
-  ul:{n:'Sanctuaire',t:'none',aoe:'allies',rad:99,x:'Tous les alliés : +1 PV et effets retirés.',
-      run:async(u,list)=>{for(const a of list){heal(a,1);cleanse(a)}}}},
- {id:'cog',name:'Cog',cls:'S',sub:'Engineer',atk:2,def:2,hab:2,pre:3,
-  ab:{n:'Brouilleur',t:'enemy',x:'Cible à portée, d6 : 1-3 Brouillage (pas de renfort), 4-6 Bouleversement (pas de capacité).',
-      run:async(u,t)=>{const r=d6();pop(t,'d6 : '+r,'#ffb42e');log(`${u.d.name} lance un d6 : <span class="r">${r}</span>`);await addEff(t,r<=3?'jam':'disrupt',u)}},
-  ul:{n:'Cryo-pulse',t:'enemy',x:'Cible à portée : Gelé (passe son tour ou sacrifie 1 PV).',
-      run:async(u,t)=>{await addEff(t,'frozen',u)}}}
-];
+      {n:'Feinte',t:'cell',cell:2,x:'Se téléporte à ≤2 cases et gagne +1 DEF jusqu\'à son prochain tour.',run:async(u,c)=>{await teleport(u,c);addBuff(u,'def',1,'turn',u);pop(u,'+1 DEF','#6aa8ff')}},
+      TGT('Éclat troublant','Cible à portée, d6 : 1-2 Brouillage, 3-6 Bouleversement.',async(u,t)=>{await addEff(t,rollPop(u,t)<=2?'jam':'disrupt',u)})],
+  ul:[SELF('Blitz','Cette attaque et la suivante ne coûtent aucune action.',async u=>{u.freeAtk=2;pop(u,'BLITZ','#ff9a5a')}),
+      ALY('Crescendo','Tous les alliés : +1 ATK jusqu\'à la fin de la manche.',99,async(u,a)=>{addBuff(a,'atk',1,'round',u);pop(a,'+1 ATK','#ff9a5a')})]},
+ Protector:{
+  ab:[ALY('Rempart','Alliés à ≤2 cases (lui compris) : +1 DEF jusqu\'à son prochain tour.',2,async(u,a)=>{addBuff(a,'def',1,'turn',u);pop(a,'+1 DEF','#6aa8ff')}),
+      ENM('Provocation','Ennemis à PRE+1 : Engourdis.',PRE1,(u,t)=>addEff(t,'numb',u)),
+      ALY('Barrière','Alliés au contact : +1 DEF ; lui : +2 DEF, jusqu\'à son prochain tour.',1,async(u,a)=>{addBuff(a,'def',a===u?2:1,'turn',u);pop(a,'+DEF','#6aa8ff')})],
+  ul:[ALY('Forteresse','Tous les alliés : +2 DEF jusqu\'à son prochain tour. Il se soigne de 1 PV.',99,async(u,a)=>{addBuff(a,'def',2,'turn',u);pop(a,'+2 DEF','#6aa8ff');if(a===u)heal(u,1)}),
+      ENM('Contre-choc','Ennemis à PRE+1 : −1 PV et Brouillage.',PRE1,async(u,t)=>{await dmg(t,1,u);if(t.alive)await addEff(t,'jam',u)})]},
+ Juggernaut:{
+  ab:[ENM('Séisme','Ennemis à PRE+1 : Engourdis.',PRE1,(u,t)=>addEff(t,'numb',u)),
+      TGT('Poing lourd','Cible à portée, d6 : 3-6 Assommé.',async(u,t)=>{if(rollPop(u,t)>=3)await addEff(t,'stun',u)}),
+      SELF('Cuirasse','+2 DEF jusqu\'à son prochain tour.',async u=>{addBuff(u,'def',2,'turn',u);pop(u,'+2 DEF','#6aa8ff')})],
+  ul:[ENM('Écrasement','Ennemis à PRE+1 : Assommés et −1 PV.',PRE1,async(u,t)=>{await addEff(t,'stun',u);await dmg(t,1,u)}),
+      SELF('Colosse','+2 ATK et +2 DEF jusqu\'à son prochain tour, +1 PV.',async u=>{addBuff(u,'atk',2,'turn',u);addBuff(u,'def',2,'turn',u);heal(u,1);pop(u,'COLOSSE','#6aa8ff')})]},
+ Ranger:{
+  ab:[TGT('Marque','Cible à portée : −1 DEF jusqu\'au prochain tour du tireur.',async(u,t)=>{addBuff(t,'def',-1,'turn',u);pop(t,'−1 DEF','#5fe0a5')}),
+      TGT('Tir toxique','Cible à portée : Toxique.',(u,t)=>addEff(t,'toxic',u)),
+      TGT('Tir d\'entrave','Cible à portée : Engourdie ; d6 4-6 = −1 DEF en plus.',async(u,t)=>{await addEff(t,'numb',u);if(rollPop(u,t)>=4){addBuff(t,'def',-1,'turn',u)}})],
+  ul:[TGT('Tir fatal','Cible à ≤6 cases (sans obstacle) : −2 PV.',(u,t)=>dmg(t,2,u),{far:6}),
+      ENM('Pluie de plomb','Ennemis à ≤4 cases : −1 PV.',4,(u,t)=>dmg(t,1,u))]},
+ Flanker:{
+  ab:[{n:'Clignotement',t:'cell',cell:4,x:'Se téléporte sur une case libre à ≤4 cases.',run:(u,c)=>teleport(u,c)},
+      TGT('Coup d\'ombre','Se téléporte au contact d\'un ennemi à ≤3 cases et combat.',(u,t)=>dashHit(u,t),{far:3,adj:true}),
+      ENM('Fumigène','Ennemis à ≤2 cases : Brouillage.',2,(u,t)=>addEff(t,'jam',u))],
+  ul:[TGT('Frappe venimeuse','Se téléporte au contact d\'un ennemi à ≤5 cases, +1 ATK, combat. Si touché : Toxique.',async(u,t)=>{if(await dashHit(u,t,1)==='hit')await addEff(t,'toxic',u)},{far:5,adj:true}),
+      TGT('Assassinat','Se téléporte au contact d\'un ennemi à ≤5 cases, +2 ATK, combat.',(u,t)=>dashHit(u,t,2),{far:5,adj:true})]},
+ Assist:{
+  ab:[{n:'Soin',t:'ally',x:'Allié à portée (ou soi) : +1 PV et retire son effet.',run:async(u,t)=>{heal(t,1);cleanse(t)}},
+      {n:'Bouclier',t:'ally',x:'Allié à portée (ou soi) : +2 DEF jusqu\'au prochain tour de Assist.',run:async(u,t)=>{addBuff(t,'def',2,'turn',u);pop(t,'+2 DEF','#6aa8ff')}},
+      {n:'Élan',t:'ally',x:'Allié à portée (ou soi) : +1 ATK et +1 HAB jusqu\'à la fin de la manche.',run:async(u,t)=>{addBuff(t,'atk',1,'round',u);addBuff(t,'hab',1,'round',u);pop(t,'+ATK +HAB','#ffd27a')}}],
+  ul:[ALY('Sanctuaire','Tous les alliés : +1 PV et effets retirés.',99,async(u,a)=>{heal(a,1);cleanse(a)}),
+      ALY('Renaissance','Tous les alliés : +1 PV et +1 DEF jusqu\'à la fin de la manche.',99,async(u,a)=>{heal(a,1);addBuff(a,'def',1,'round',u)})]},
+ Engineer:{
+  ab:[TGT('Brouilleur','Cible à portée, d6 : 1-3 Brouillage, 4-6 Bouleversement.',async(u,t)=>{await addEff(t,rollPop(u,t)<=3?'jam':'disrupt',u)}),
+      TGT('Piège','Cible à portée : Engourdie et −1 DEF jusqu\'au prochain tour.',async(u,t)=>{await addEff(t,'numb',u);addBuff(t,'def',-1,'turn',u)}),
+      TGT('Mine','Cible à portée, d6 : 6 = −1 PV, sinon Engourdie.',async(u,t)=>{if(rollPop(u,t)===6)await dmg(t,1,u);else await addEff(t,'numb',u)})],
+  ul:[TGT('Cryo-pulse','Cible à portée : Gelé (passe son tour ou sacrifie 1 PV).',(u,t)=>addEff(t,'frozen',u)),
+      ALY('Surcharge','Tous les alliés : +1 ATK et +1 DEF jusqu\'à la fin de la manche.',99,async(u,a)=>{addBuff(a,'atk',1,'round',u);addBuff(a,'def',1,'round',u)})]}
+};
+const RAW=[[0,"Néo","Performer",3,4,2,3,5],[1,"Zeus","Brawler",4,3,3,2,5],[2,"Héra","Engineer",3,3,2,3,4],[3,"Poséidon","Protector",2,4,3,2,4],[4,"Hadès","Ranger",3,2,2,4,4],[5,"Athéna","Protector",3,4,1,2,3],[6,"Aphrodite","Assist",2,3,2,3,3],[7,"Arès","Juggernaut",4,3,2,1,3],[8,"Apollo","Assist",2,2,3,3,3],[9,"Déméter","Ranger",2,2,2,4,3],[10,"Hermès","Flanker",3,1,4,2,3],[11,"Dionysos","Brawler",3,3,1,2,3],[12,"Cérès","Flanker",3,2,3,2,3],[13,"Héphaistos","Engineer",4,3,1,2,3],[14,"Moon Fang","Juggernaut",3,4,2,1,3],[15,"Vortex","Ranger",2,1,3,4,3],[16,"Brainless","Performer",2,2,3,3,3],[17,"Move","Assist",3,2,2,3,3],[18,"Magnet","Protector",2,4,1,3,3],[19,"Scatter","Assist",3,2,3,2,3],[20,"Viscous","Protector",3,3,2,2,3],[21,"Blackout","Flanker",3,2,4,2,4],[23,"Hover","Ranger",2,3,2,3,3],[25,"Kinetic","Ranger",3,1,2,4,3],[30,"Mr.Midnight","Performer",3,3,2,3,4],[32,"Chance","Assist",3,3,1,3,3],[35,"Miziki","Juggernaut",3,4,1,2,3],[40,"Diaphane","Flanker",3,3,3,2,4],[41,"Italanta","Juggernaut",3,4,1,2,3],[51,"Captain Diziiz","Engineer",4,3,2,2,4],[52,"Lann","Protector",3,3,2,2,3],[53,"Dr.Fank","Assist",3,3,2,2,3],[54,"Turni","Brawler",4,2,2,2,3],[62,"Cracken","Assist",3,2,3,3,4],[63,"Zero Day","Flanker",2,2,3,3,3],[66,"Rooter","Engineer",3,2,3,1,2],[67,"Smish","Assist",2,3,2,2,2],[73,"Kasuf","Flanker",3,3,4,1,4],[74,"Passage","Ranger",2,2,2,4,3],[84,"Venena","Ranger",3,1,3,4,4],[87,"Pembe","Engineer",3,3,2,2,3],[95,"Gummi","Protector",3,3,2,3,4],[106,"Bot","Assist",2,3,2,2,1],[107,"Alíngua","Flanker",3,2,3,3,4],[108,"Dugalen","Ranger",3,2,1,4,3],[109,"Monstruo","Performer",3,3,3,1,3],[110,"Zhúzi","Juggernaut",4,3,2,1,3],[111,"Khama","Brawler",3,2,3,2,3],[118,"Apagar","Assist",3,3,2,3,4],[119,"Shars","Brawler",4,3,2,1,3],[120,"Qima","Juggernaut",3,3,3,1,3],[128,"Gurume","Brawler",3,4,3,1,4],[133,"Lecker","Protector",3,3,2,1,2],[139,"Breakbone","Juggernaut",3,4,3,1,4],[140,"Ramil","Performer",3,3,2,2,3],[141,"Icetooth","Protector",3,3,1,3,3],[143,"Boneka","Brawler",2,3,2,3,3],[144,"Tinard","Protector",2,4,2,1,2],[152,"Arwat","Assist",2,4,3,2,4],[154,"Veibuca","Ranger",3,2,2,3,3],[155,"Bellen","Protector",2,3,2,3,3],[157,"Bato","Brawler",3,3,2,2,2],[165,"Morfosia","Performer",2,3,3,3,4],[166,"Muerta","Performer",3,2,3,2,3],[167,"Alzali","Ranger",3,2,2,3,3],[176,"Ahri","Juggernaut",3,4,2,2,4],[177,"Volé","Assist",3,3,3,2,4],[178,"Vacía","Performer",4,4,2,1,4],[179,"Meno","Brawler",3,4,1,2,3],[188,"Chitry","Flanker",4,3,3,1,4],[189,"Rebob","Performer",2,2,3,3,3],[190,"Logam","Juggernaut",3,4,2,1,3],[200,"Trake","Brawler",4,3,1,3,4],[201,"Pélé","Performer",4,3,2,2,4],[202,"Belzébuth","Juggernaut",4,4,2,1,4],[203,"Hörmung","Performer",4,2,3,2,4],[213,"Sharp","Brawler",3,2,3,3,4],[214,"Jinsei","Engineer",3,2,3,2,3],[215,"Alf","Protector",2,3,3,2,3],[218,"Big Wheel","Flanker",2,2,3,2,2],[222,"Ban-Cheol","Assist",3,3,3,2,4],[223,"Shinda","Performer",2,2,3,3,3],[234,"Panja","Performer",3,4,2,2,4],[235,"Inkho","Assist",2,3,2,4,3],[236,"Rang","Ranger",3,2,2,3,3],[245,"Otrava","Brawler",4,3,2,2,4],[246,"Sneaka","Flanker",3,3,3,2,4],[247,"Crâne","Ranger",3,1,3,3,3],[257,"Rènào","Flanker",3,3,4,1,4],[258,"Jog","Protector",3,4,2,1,3],[274,"Ora","Performer",3,3,3,2,4],[275,"Dafa","Protector",2,4,2,2,3],[276,"Guano","Brawler",4,3,2,1,3],[277,"Multi","Juggernaut",3,3,2,2,3],[278,"Levit","Juggernaut",3,3,1,3,3],[279,"Rozko","Flanker",3,2,3,2,3],[280,"Myrsky","Engineer",3,2,2,3,3],[281,"Desgarra","Ranger",3,1,3,3,3],[288,"Tabib","Protector",3,4,2,2,4],[290,"Rescate","Performer",2,2,2,4,3],[292,"Kokal","Juggernaut",2,4,2,2,3],[300,"Kuini Wai","Protector",3,4,2,2,4],[301,"Tuba","Flanker",2,3,3,2,3],[302,"Natsi","Juggernaut",3,3,3,1,3],[306,"Nanook","Brawler",3,3,2,2,3],[313,"Milaza","Ranger",2,3,2,4,4],[314,"Anma","Flanker",3,2,3,2,3],[315,"Djinn","Assist",2,2,3,3,3],[323,"Naga","Protector",3,3,3,3,5],[324,"Sanjin","Brawler",4,3,2,2,4],[325,"Pembe","Protector",3,4,2,2,4],[326,"Hun","Flanker",3,2,4,2,4],[334,"Tangaroa","Juggernaut",4,4,3,1,5],[335,"Nabsi","Engineer",3,2,3,3,4],[336,"Fumar","Flanker",3,3,3,2,4],[337,"Oum-Oum","Ranger",2,2,3,4,4],[347,"Silla","Engineer",3,4,3,2,5],[348,"Frasco","Engineer",2,4,2,3,4],[349,"Mriya","Flanker",2,2,4,3,4],[350,"Giganto","Brawler",4,3,2,2,4],[351,"Mêlée","Juggernaut",2,3,2,3,3],[360,"Héméra","Flanker",2,2,4,4,5],[361,"Random","Ranger",3,2,2,4,4],[362,"Kaï","Juggernaut",3,4,2,2,4],[363,"Hokioi","Flanker",2,3,4,2,4],[364,"Nasua","Flanker",2,2,3,3,3],[365,"Tasalub","Protector",4,4,1,1,3],[373,"Black.1","Brawler",4,4,2,2,5],[374,"Red.2","Flanker",4,2,3,2,4],[375,"Green.3","Performer",3,2,3,3,4],[376,"Blue.4","Juggernaut",3,3,3,2,4]];
+const CHARS=RAW.map(([num,name,sub,atk,def,hab,pre,stars])=>({id:'c'+num,num,name,sub,cls:ROLE_CLS[sub],atk,def,hab,pre,stars,
+  ab:LIB[sub].ab[num%3],ul:LIB[sub].ul[Math.floor(num/3)%2]}));
 const SUBTXT={Brawler:'Attaque gagnée : relance son d6 au prochain combat.',Performer:'Défense gagnée : relance le d6 de sa prochaine capacité.',Protector:'Égalité au combat : inflige 1 PV.',Juggernaut:'Le 1er PV ne peut être perdu que par un combat.',Ranger:'Ignore les structures pour attaquer.',Flanker:'Ignore les structures pour se déplacer.',Assist:'Attaque gagnée : d3, 2-3 = soigne un allié de 1 PV.',Engineer:'Défense gagnée : d3, 2-3 = se soigne de 1 PV.'};
 
 /* Cartes renfort (extra, 1 par tour de personnage) */
@@ -186,7 +226,7 @@ const REIN=[
 const newDeck=()=>shuffle([...REIN,...REIN].map(c=>({...c})));
 
 /* ============ ÉTAT ============ */
-const G={phase:'draft',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
+const G={bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,phase:'menu',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
   cur:{c:3,r:6},hl:new Map(),solo:new Set(),token:null,hand:[[],[]],deck:[newDeck(),newDeck()],ult:[false,false],
   picks:[[],[]],dstep:0,dsel:0,pl:0,cardIdx:0,nid:1,over:null};
 const alive=t=>G.units.filter(u=>u.alive&&u.team===t);
@@ -248,8 +288,8 @@ function buildUnit(d,team){
   const g=new THREE.Group(),body=new THREE.Group();g.add(body);const mats=[];
   const M=col=>{const m=mat(col);m.userData.col=new THREE.Color(col);mats.push(m);return m};
   const add=(geo,m,x=0,y=0,z=0)=>{const me=new THREE.Mesh(geo,m);me.position.set(x,y,z);me.castShadow=true;body.add(me);return me};
-  const col=CLS[d.cls].h,light=new THREE.Color(col).lerp(new THREE.Color(0xffffff),.4).getHex(),dark=new THREE.Color(col).multiplyScalar(.55).getHex();
-  const idx=CHARS.filter(c=>c.cls===d.cls).indexOf(d);
+  const col=new THREE.Color(CLS[d.cls].h).offsetHSL(((d.num*37)%24-12)/360,0,((d.num*13)%9-4)/100).getHex(),light=new THREE.Color(col).lerp(new THREE.Color(0xffffff),.4).getHex(),dark=new THREE.Color(col).multiplyScalar(.55).getHex();
+  const idx=d.num%2;
   add(new THREE.CylinderGeometry(0.38,0.42,0.12,6),M(team===0?0xf2f4fa:0x22242e),0,0.06,0);
   const ring=add(new THREE.TorusGeometry(0.37,0.035,4,6),M(col),0,0.13,0);ring.rotation.x=Math.PI/2;
   if(d.cls==='A'){const b=add(new THREE.OctahedronGeometry(0.33,0),M(col),0,0.56,0);b.scale.y=1.4;
@@ -333,7 +373,7 @@ function pathTo(u,reach,dest){const p=[];let k=KEY(dest.c,dest.r);while(k&&k!==K
 function targetsFor(u,s){
   if(s.t==='enemy')return alive(1-u.team).filter(t=>s.far?(cheb(u,t)<=s.far&&(!s.adj||freeAdj(t).length)):rangeState(u,t)===1);
   if(s.t==='ally')return alive(u.team).filter(t=>t===u||cheb(u,t)<=stat(u,'pre')+(isStruct(u.c,u.r)?1:0));
-  if(s.t==='cell'){const o=[];for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(!unitAt(c,r)&&cheb(u,{c,r})<=s.cell)o.push({c,r});return o}
+  if(s.t==='cell'){const o=[],cr=typeof s.cell==='function'?s.cell(u):s.cell;for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(!unitAt(c,r)&&cheb(u,{c,r})<=cr)o.push({c,r});return o}
   const rad=typeof s.rad==='function'?s.rad(u):s.rad;
   const pool=s.aoe==='enemies'?alive(1-u.team):s.aoe==='allies'?alive(u.team):[u];return pool.filter(t=>cheb(u,t)<=rad)}
 
@@ -425,16 +465,17 @@ function recalc(){G.hl=new Map();G.solo=new Set();
 const hearts=u=>'♥'.repeat(u.hp)+'<i>'+'♥'.repeat(4-u.hp)+'</i>';
 const fxIcon=u=>u.effect?EFF[u.effect.type][0]:'';
 function refresh(){
-  if(G.phase==='draft'||G.phase==='place'){renderTop();renderRosters();$('#dock').style.display=G.phase==='place'?'grid':'none';renderDock();return}
+  if(G.phase==='menu'||G.phase==='pick'){$('#dock').style.display='none';renderTop();renderRosters();return}
   $('#dock').style.display='grid';renderTop();renderRosters();renderDock()}
 function renderTop(){
   const b=$('#banner'),h=$('#hint');
-  if(G.phase==='draft'){b.innerHTML='<b>Draft des personnages</b>';h.innerHTML='Choisis une carte par classe';return}
+  if(G.phase==='menu'||G.phase==='pick'){b.innerHTML='<b>Sélection des personnages</b>';h.innerHTML='';return}
   if(G.phase==='place'){const t=G.pl%2,d=G.picks[t][Math.floor(G.pl/2)];b.innerHTML=`<span class="dot t${t}"></span>Placement · ${TEAMS[t]}`;h.innerHTML=`Place <b>${d.name}</b> sur une case jaune : <kbd>←↑↓→</kbd> puis <kbd>Entrée</kbd> · <kbd>X</kbd> placement auto`;return}
   if(G.phase==='over'){b.innerHTML='<b>Partie terminée</b>';h.innerHTML='';return}
-  b.innerHTML=`<span>Manche ${G.round}</span><span class="dot t${G.turnPlayer}"></span><span>Tour des ${TEAMS[G.turnPlayer]}</span>`;
+  b.innerHTML=`<span>Manche ${G.round}</span><span class="dot t${G.turnPlayer}"></span><span>Tour des ${TEAMS[G.turnPlayer]}${G.bot&&G.turnPlayer===1?' (bot)':''}</span>`;
   const m=G.mode,u=G.sel;let t='';
-  if(m==='idle')t=`Choisis un personnage <kbd>Entrée</kbd> ou <kbd>Tab</kbd> pour passer au suivant`;
+  if(m==='idle'&&G.bot&&G.turnPlayer===1)t='Le bot réfléchit…';
+  else if(m==='idle')t=`Choisis un personnage <kbd>Entrée</kbd> ou <kbd>Tab</kbd> pour passer au suivant`;
   else if(m==='frozen')t=`${u.d.name} est gelé 🧊 : <kbd>F</kbd> briser la glace (−1 PV) et jouer · <kbd>E</kbd> passer son tour`;
   else if(m==='sel')t=`Actions restantes : ${G.actions} · <kbd>1</kbd> Déplacer <kbd>2</kbd> Attaquer <kbd>3</kbd> Capacité <kbd>4</kbd> Ultime <kbd>5</kbd> Renfort <kbd>E</kbd> Fin`;
   else if(m==='move')t='Choisis une case bleue · <kbd>Entrée</kbd> valider · <kbd>Échap</kbd> annuler';
@@ -468,34 +509,101 @@ function renderBadges(){const el=$('#badges');let h='';for(const u of G.units){i
 function renderKeys(){const K=[['←↑↓→ / WASD','Curseur'],['Entrée / Espace','Valider'],['Tab','Perso suivant'],['1','Déplacer'],['2','Attaquer'],['3','Capacité'],['4','Ultime (manche 2+)'],['5','Carte renfort'],['E','Fin de tour'],['Échap','Annuler'],['V','Vue plongeante/inclinée'],['+ / −','Zoom'],['H','Masquer l\'aide']];
   $('#keys').innerHTML='<div class="kh"><span>Contrôles</span><kbd>H</kbd></div>'+K.map(([k,t])=>`<kbd>${k}</kbd><span>${t}</span>`).join('')}
 
-/* ============ DRAFT & PLACEMENT ============ */
-function startDraft(){G.units.forEach(u=>scene.remove(u.mesh));G.units=[];G.phase='draft';G.picks=[[],[]];G.dstep=0;G.dsel=0;G.round=0;G.hand=[[],[]];G.deck=[newDeck(),newDeck()];G.ult=[false,false];G.sel=null;G.mode='idle';G.token=null;G.over=null;G.busy=false;
-  $('#log').innerHTML='';$('#dice').hidden=true;G.hl=new Map();paintHL();syncToken();showDraft();refresh()}
-function showDraft(){const ov=$('#overlay');ov.className='on';const st=G.dstep;const picker=st%2;
-  const col=cls=>{const opts=CHARS.filter(c=>c.cls===cls),i=ORDER.indexOf(cls);
-    return`<div class="dcol ${i===st?'cur':''}" style="--cc:${CLS[cls].c}"><h4>${CLS[cls].n}${i===st?` · ${TEAMS[picker]} choisissent`:''}</h4>`+opts.map((d,j)=>{
-      const owner=G.picks[0].includes(d)?0:G.picks[1].includes(d)?1:-1;
-      return`<div class="dc ${owner>=0?'t'+owner:''} ${i===st&&j===G.dsel?'sel':''}" data-cls="${cls}" data-j="${j}" style="--cc:${CLS[cls].c}">
-      <h5>${d.name}<small>${d.sub}</small></h5><div class="stats"><span>ATK <b>${d.atk}</b></span><span>DEF <b>${d.def}</b></span><span>HAB <b>${d.hab}</b></span><span>PRE <b>${d.pre}</b></span></div>
-      ${owner>=0?`<div class="who">→ ${TEAMS[owner]}</div>`:''}<p><b>${d.ab.n}</b> — ${d.ab.x}</p><p><b>Ultime · ${d.ul.n}</b> — ${d.ul.x}</p><p><i>${d.sub} :</i> ${SUBTXT[d.sub]}</p></div>`}).join('')+`</div>`};
-  ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> Arena</h1><p>Mode casual : chaque camp reçoit un personnage par classe (Attaque, Défense, Technique, Soutien). Les Blancs choisissent en premier en Attaque, puis on alterne.</p>
-   <div class="dgrid">${ORDER.map(col).join('')}</div>
-   <div class="ovbar"><span><kbd>←</kbd> <kbd>→</kbd> changer de carte</span><span><kbd>Entrée</kbd> choisir</span><span><kbd>R</kbd> tout au hasard</span><span><kbd>B</kbd> Variante avancée : <b style="color:var(--amber)">${G.variant?'ACTIVE':'désactivée'}</b></span></div></div>`;
-  ov.querySelectorAll('.dc').forEach(el=>el.onclick=()=>{if(ORDER.indexOf(el.dataset.cls)===G.dstep){G.dsel=+el.dataset.j;draftPick()}})}
-function draftPick(){const cls=ORDER[G.dstep],opts=CHARS.filter(c=>c.cls===cls),picker=G.dstep%2;
-  G.picks[picker].push(opts[G.dsel]);G.picks[1-picker].push(opts[1-G.dsel]);G.dstep++;G.dsel=0;
-  if(G.dstep>=4){$('#overlay').className='';startPlacement()}else showDraft()}
+/* ============ MENU, SÉLECTION & PLACEMENT ============ */
+function resetGame(){G.units.forEach(u=>scene.remove(u.mesh));G.units=[];G.picks=[[],[]];G.round=0;G.hand=[[],[]];G.deck=[newDeck(),newDeck()];G.ult=[false,false];G.sel=null;G.mode='idle';G.token=null;G.over=null;G.busy=false;G.botRun=false;
+  $('#log').innerHTML='';$('#dice').hidden=true;G.hl=new Map();paintHL();syncToken()}
+function startMenu(){resetGame();G.phase='menu';G.menuSel=G.bot?1:0;showMenu();refresh()}
+function showMenu(){const ov=$('#overlay');ov.className='on';
+  ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> Arena</h1><p>Duel tactique au tour par tour. Chaque camp compose une équipe de 4 personnages, un par classe.</p>
+   <div class="modes"><div class="mode ${G.menuSel===0?'sel':''}" data-m="0"><h2><kbd>1</kbd> Deux joueurs</h2><p>Blancs et Noirs jouent chacun leur tour sur le même clavier.</p></div>
+   <div class="mode ${G.menuSel===1?'sel':''}" data-m="1"><h2><kbd>2</kbd> Contre le bot</h2><p>Tu joues les Blancs. Le bot (niveau facile) joue les Noirs : il hésite, se trompe et attaque sans stratégie.</p></div></div>
+   <div class="ovbar"><span><kbd>←</kbd> <kbd>→</kbd> choisir</span><span><kbd>Entrée</kbd> continuer</span><span><kbd>B</kbd> Variante avancée : <b style="color:var(--amber)">${G.variant?'ACTIVE':'désactivée'}</b></span></div></div>`;
+  ov.querySelectorAll('.mode').forEach(el=>el.onclick=()=>{G.menuSel=+el.dataset.m;menuGo()})}
+function menuGo(){G.bot=G.menuSel===1;startPick()}
+function startPick(){G.phase='pick';G.pickTeam=0;G.ptab='A';G.pidx=0;G.picks=[[],[]];showPick();refresh()}
+const takenBy=d=>G.picks[0].includes(d)?0:G.picks[1].includes(d)?1:-1;
+const poolOf=c=>CHARS.filter(d=>d.cls===c);
+function showPick(){const ov=$('#overlay');ov.className='on';const t=G.pickTeam,mine=G.picks[t],list=poolOf(G.ptab);G.pidx=Math.max(0,Math.min(list.length-1,G.pidx));const cur=list[G.pidx];
+  const prevScroll=(ov.querySelector('.pgrid')||{}).scrollTop||0;
+  const slot=c=>{const d=mine.find(x=>x.cls===c);return`<div class="slot ${d?'':'empty'}" style="--cc:${CLS[c].c}"><small>${CLS[c].n}</small>${d?`<b>${d.name}</b>`:'—'}</div>`};
+  const st=d=>`<span class="sv"><i style="color:#ee7b6e">${d.atk}</i><i style="color:#6aa8ff">${d.def}</i><i style="color:#c48cff">${d.hab}</i><i style="color:#ffd05a">${d.pre}</i></span>`;
+  ov.innerHTML=`<div class="ov pk"><div class="pkhead"><h1>${t===0?'Blancs':'Noirs'} <span>: compose ton équipe</span></h1>
+   <div class="slots">${ORDER.map(slot).join('')}</div>
+   <div class="tabs">${ORDER.map((c,i)=>`<button class="tab ${c===G.ptab?'on':''}" data-c="${c}" style="--cc:${CLS[c].c}"><kbd>${i+1}</kbd> ${CLS[c].n}</button>`).join('')}<span class="grow"></span>
+   <button class="btn" id="pRand"><kbd>R</kbd>Au hasard</button><button class="btn" id="pOk" ${mine.length===4?'':'disabled'}><kbd>C</kbd>Valider l'équipe</button></div></div>
+   <div class="pgrid">${list.map((d,i)=>{const o=takenBy(d);return`<div class="pc ${i===G.pidx?'cur':''} ${mine.includes(d)?'mine':''} ${o>=0&&o!==t?'gone':''}" data-i="${i}" style="--cc:${CLS[d.cls].c}"><b>${d.name}</b><small>${d.sub} · #${String(d.num).padStart(3,'0')}</small>${st(d)}${o>=0&&o!==t?'<em>Pris</em>':''}</div>`}).join('')}</div>
+   <div class="pinfo" style="--cc:${CLS[cur.cls].c}"><h3>${cur.name} <span class="chip">${CLS[cur.cls].n} · ${cur.sub}</span> <span class="stars">${'★'.repeat(cur.stars)}</span></h3>
+   <div class="stats"><span>ATK <b>${cur.atk}</b></span><span>DEF <b>${cur.def}</b></span><span>HAB <b>${cur.hab}</b></span><span>PRE <b>${cur.pre}</b></span></div>
+   <div class="abil"><b>${cur.ab.n}</b> — ${cur.ab.x}<br><b>Ultime · ${cur.ul.n}</b> — ${cur.ul.x}${G.variant?`<br><b>${cur.sub}</b> — ${SUBTXT[cur.sub]}`:''}</div></div>
+   <div class="ovbar"><span><kbd>←↑↓→</kbd> naviguer</span><span><kbd>Tab</kbd>/<kbd>1-4</kbd> classe</span><span><kbd>Entrée</kbd> choisir</span><span><kbd>Retour</kbd> retirer</span></div></div>`;
+  const g=ov.querySelector('.pgrid');g.scrollTop=prevScroll;const c=g.children[G.pidx];if(c)c.scrollIntoView({block:'nearest'});
+  ov.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{G.ptab=b.dataset.c;G.pidx=0;showPick()});
+  g.querySelectorAll('.pc').forEach(el=>{el.onclick=()=>{G.pidx=+el.dataset.i;pickHere()};});
+  $('#pRand').onclick=pickRandom;$('#pOk').onclick=pickConfirm}
+function pickHere(){const t=G.pickTeam,d=poolOf(G.ptab)[G.pidx],o=takenBy(d);
+  if(o>=0&&o!==t){toast('Déjà pris par l\'autre camp');return showPick()}
+  G.picks[t]=G.picks[t].filter(x=>x.cls!==d.cls);G.picks[t].push(d);
+  const nx=ORDER.find(c=>!G.picks[t].some(x=>x.cls===c));if(nx){G.ptab=nx;G.pidx=0}showPick()}
+function pickRandom(){const t=G.pickTeam;for(const c of ORDER){if(G.picks[t].some(x=>x.cls===c))continue;const av=poolOf(c).filter(d=>takenBy(d)<0);G.picks[t].push(av[Math.floor(Math.random()*av.length)])}showPick()}
+function pickConfirm(){const t=G.pickTeam;if(G.picks[t].length<4){toast('Il faut un personnage par classe');return}
+  G.picks[t].sort((a,b)=>ORDER.indexOf(a.cls)-ORDER.indexOf(b.cls));
+  if(t===0){G.pickTeam=1;G.ptab='A';G.pidx=0;if(G.bot){pickRandom();pickConfirm();return}showPick()}
+  else{$('#overlay').className='';startPlacement()}}
+function pickKey(k,e){const list=poolOf(G.ptab),cols=Math.max(1,getComputedStyle(document.querySelector('.pgrid')).gridTemplateColumns.split(' ').length);
+  if(k==='arrowleft'||k==='a')G.pidx--;else if(k==='arrowright'||k==='d')G.pidx++;else if(k==='arrowup'||k==='w')G.pidx-=cols;else if(k==='arrowdown'||k==='s')G.pidx+=cols;
+  else if(k==='tab'){const i=ORDER.indexOf(G.ptab);G.ptab=ORDER[(i+(e.shiftKey?3:1))%4];G.pidx=0}
+  else if('1234'.includes(k)&&k.length===1){G.ptab=ORDER[+k-1];G.pidx=0}
+  else if(k==='enter'||k===' '){pickHere();return}
+  else if(k==='backspace'||k==='delete'){G.picks[G.pickTeam]=G.picks[G.pickTeam].filter(x=>x.cls!==G.ptab)}
+  else if(k==='r'){pickRandom();return}else if(k==='c'){pickConfirm();return}else return;
+  showPick()}
 function startPlacement(){G.phase='place';G.pl=0;const t=0;G.cur={c:SPAWN[t][0][0],r:SPAWN[t][0][1]};recalc();refresh();log('Placement : choisis la case de départ de chaque personnage')}
 function placeHere(c,r){if(G.hl.get(KEY(c,r))!=='place'){toast('Choisis une case jaune');return}
   const t=G.pl%2,d=G.picks[t][Math.floor(G.pl/2)];spawnUnit(d,t,c,r);G.pl++;
+  if(G.bot&&G.pl%2===1&&G.pl<8){const fr=shuffle(SPAWN[1].filter(([a,b])=>!unitAt(a,b)))[0];G.hl.set(KEY(fr[0],fr[1]),'place');placeHere(fr[0],fr[1]);return}
   if(G.pl>=8){G.phase='play';spinWheel(true);log('Roue initiale : premier jeton renfort placé au centre');beginRound();recalc();return}
   const nt=G.pl%2;G.cur={c:SPAWN[nt][0][0],r:SPAWN[nt][0][1]};recalc();refresh()}
-function autoPlace(){while(G.phase==='place'){const t=G.pl%2,free=SPAWN[t].find(([c,r])=>!unitAt(c,r));placeHere(free[0],free[1])}}
+function autoPlace(){while(G.phase==='place'){const t=G.pl%2,free=SPAWN[t].find(([c,r])=>!unitAt(c,r));G.hl.set(KEY(free[0],free[1]),'place');placeHere(free[0],free[1])}}
 function showOver(){const ov=$('#overlay');ov.className='on';
   ov.innerHTML=`<div class="ov"><div class="big">Victoire des <span style="color:var(--amber)">${TEAMS[G.over]}</span></div><p style="text-align:center">Tous les personnages adverses sont éliminés.</p><p style="text-align:center"><kbd>Entrée</kbd> pour rejouer</p></div>`}
 
+
+/* ============ BOT (niveau facile) ============ */
+const pickR=a=>a[Math.floor(Math.random()*a.length)];
+async function botTurn(){
+  if(G.botRun)return;G.botRun=true;
+  try{
+    await sleep(700);if(G.phase!=='play'||G.turnPlayer!==1||G.mode!=='idle')return;
+    const list=alive(1).filter(x=>!x.played);if(!list.length)return;
+    const u=pickR(list);G.cur={c:u.c,r:u.r};refresh();await sleep(450);
+    selectUnit(u);await sleep(500);
+    if(G.mode==='frozen'){log(`${u.d.name} (bot) reste gelé`);await endTurn();return}
+    for(let i=0;i<5&&G.sel===u&&G.phase==='play';i++){if(!await botAct(u))break;await sleep(400)}
+    if(G.sel===u&&G.phase==='play')await endTurn();
+  }finally{G.botRun=false}}
+async function botAct(u){
+  if(can('card')[0]&&Math.random()<.25){await useCard(Math.floor(Math.random()*G.hand[1].length));return true}
+  if(can('atk')[0]&&Math.random()<.75){const ts=attackTargets(u),x=Math.random()<.4?ts.slice().sort((a,b)=>a.t.hp-b.t.hp)[0]:pickR(ts);await doAttack(x.t,x.solo);return true}
+  if(can('ult')[0]&&Math.random()<.15&&await botAbility(u,true))return true;
+  if(can('abl')[0]&&Math.random()<.35&&await botAbility(u,false))return true;
+  if(can('move')[0]){
+    const reach=[...reachable(u).values()].filter(n=>n.c!==u.c||n.r!==u.r),foe=alive(0).sort((a,b)=>cheb(u,a)-cheb(u,b))[0];
+    if(!reach.length||!foe)return false;
+    const dest=Math.random()<.3?pickR(reach):reach.slice().sort((a,b)=>cheb(a,foe)-cheb(b,foe)||Math.random()-.5)[0];
+    await doMove({c:dest.c,r:dest.r});return true}
+  return false}
+async function botAbility(u,isUlt){
+  const s=isUlt?u.d.ul:u.d.ab,ts=targetsFor(u,s);if(!ts.length)return false;
+  let tg;
+  if(s.t==='enemy')tg=pickR(ts);
+  else if(s.t==='ally'){const w=ts.slice().sort((a,b)=>a.hp-b.hp)[0];if(w.hp>=4&&!w.effect&&Math.random()<.7)return false;tg=w}
+  else if(s.t==='cell'){const foe=alive(0).sort((a,b)=>cheb(u,a)-cheb(u,b))[0];tg=Math.random()<.3?pickR(ts):ts.slice().sort((a,b)=>cheb(a,foe)-cheb(b,foe))[0]}
+  else tg=ts;
+  await doAbility(isUlt,tg);return true}
+
 /* ============ ENTRÉES ============ */
 async function command(cmd){
+  if(G.bot&&G.turnPlayer===1)return;
   if(G.busy||G.phase!=='play'||!G.sel)return;const u=G.sel;
   if(cmd==='end'){if(G.mode==='frozen'){log(`${u.d.name} reste gelé et passe son tour`)}await endTurn();return}
   if(cmd==='thaw'){if(G.mode!=='frozen')return;G.busy=true;u.effect=null;log(`${u.d.name} brise la glace`);await dmg(u,1,null);G.busy=false;if(u.alive){G.mode='sel';recalc();refresh()}else{await endTurn()}return}
@@ -508,7 +616,7 @@ async function command(cmd){
   else{const k=[...G.hl.keys()][0];if(k){const[c,r]=k.split(',').map(Number);G.cur={c,r}}}
   refresh()}
 async function confirmAct(){
-  if(G.busy)return;const{c,r}=G.cur;
+  if(G.busy)return;if(G.phase==='play'&&G.bot&&G.turnPlayer===1)return;const{c,r}=G.cur;
   if(G.phase==='place')return placeHere(c,r);
   if(G.phase!=='play')return;
   if(G.mode==='idle'){const u=unitAt(c,r);if(u&&u.team===G.turnPlayer&&!u.played)selectUnit(u);else toast(u&&u.played?'Ce personnage a déjà joué cette manche':`Choisis un personnage des ${TEAMS[G.turnPlayer]}`);return}
@@ -522,23 +630,25 @@ async function confirmAct(){
     if(s.t==='cell'){if(h)return doAbility(isU,{c,r})}else if(t&&h)return doAbility(isU,t)}
   toast('Cible ou case invalide')}
 const MOVE={arrowup:[0,-1],w:[0,-1],arrowdown:[0,1],s:[0,1],arrowleft:[-1,0],a:[-1,0],arrowright:[1,0],d:[1,0],z:[0,-1],q:[-1,0]};
-function cancel(){if(G.busy||G.phase!=='play')return;if(G.mode==='sel'&&!G.committed&&G.sel){G.sel=null;G.mode='idle';recalc();refresh()}else if(['move','atk','abl','ult','card'].includes(G.mode)){G.mode='sel';recalc();refresh()}}
+function cancel(){if(G.busy||G.phase!=='play'||(G.bot&&G.turnPlayer===1))return;if(G.mode==='sel'&&!G.committed&&G.sel){G.sel=null;G.mode='idle';recalc();refresh()}else if(['move','atk','abl','ult','card'].includes(G.mode)){G.mode='sel';recalc();refresh()}}
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();if(e.ctrlKey||e.metaKey||e.altKey)return;
   if(['arrowup','arrowdown','arrowleft','arrowright',' ','tab'].includes(k))e.preventDefault();
-  if(G.phase==='draft'){
-    if(k==='arrowleft'||k==='arrowright'||k==='a'||k==='d'){G.dsel=1-G.dsel;showDraft()}
-    else if(k==='enter'||k===' ')draftPick();
-    else if(k==='b'){G.variant=!G.variant;showDraft()}
-    else if(k==='r'){while(G.dstep<4){G.dsel=Math.round(Math.random());draftPick()}}
+  if(G.phase==='menu'){
+    if(k==='arrowleft'||k==='arrowright'||k==='a'||k==='d'||k==='arrowup'||k==='arrowdown'){G.menuSel=1-G.menuSel;showMenu()}
+    else if(k==='1'||k==='2'){G.menuSel=+k-1;menuGo()}
+    else if(k==='enter'||k===' ')menuGo();
+    else if(k==='b'){G.variant=!G.variant;showMenu()}
     return}
-  if(G.phase==='over'){if(k==='enter'){$('#overlay').className='';startDraft()}return}
+  if(G.phase==='pick'){pickKey(k,e);return}
+  if(G.phase==='over'){if(k==='enter'){$('#overlay').className='';startMenu()}return}
   if(k==='v'){camMode=1-camMode;return}
   if(k==='+'||k==='='){zoomMul=Math.max(.6,zoomMul-.1);resize();return}
   if(k==='-'||k==='_'){zoomMul=Math.min(1.6,zoomMul+.1);resize();return}
   if(k==='h'){$('#keys').classList.toggle('min');return}
   if(G.phase==='place'&&k==='x'){autoPlace();return}
   if(G.busy)return;
+  if(G.phase==='play'&&G.bot&&G.turnPlayer===1&&!MOVE[k])return;
   if(G.mode==='card'){
     if(k==='arrowup'||k==='w'){G.cardIdx=(G.cardIdx+G.hand[G.sel.team].length-1)%G.hand[G.sel.team].length;refresh();return}
     if(k==='arrowdown'||k==='s'){G.cardIdx=(G.cardIdx+1)%G.hand[G.sel.team].length;refresh();return}
@@ -556,8 +666,8 @@ addEventListener('keydown',e=>{
 // souris
 const ray=new THREE.Raycaster(),mp=new THREE.Vector2();
 function pick(ev){const r=canvas.getBoundingClientRect();mp.set((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1);ray.setFromCamera(mp,cam);const h=ray.intersectObjects(tiles)[0];return h&&h.object.userData}
-canvas.addEventListener('pointermove',ev=>{if(G.phase==='draft'||G.busy)return;const p=pick(ev);if(p&&(p.c!==G.cur.c||p.r!==G.cur.r)){G.cur={c:p.c,r:p.r};renderDock()}});
-canvas.addEventListener('click',ev=>{if(G.phase==='draft')return;const p=pick(ev);if(p){G.cur={c:p.c,r:p.r};confirmAct()}});
+canvas.addEventListener('pointermove',ev=>{if(G.phase==='menu'||G.phase==='pick'||G.busy)return;const p=pick(ev);if(p&&(p.c!==G.cur.c||p.r!==G.cur.r)){G.cur={c:p.c,r:p.r};renderDock()}});
+canvas.addEventListener('click',ev=>{if(G.phase==='menu'||G.phase==='pick')return;const p=pick(ev);if(p){G.cur={c:p.c,r:p.r};confirmAct()}});
 canvas.addEventListener('contextmenu',ev=>{ev.preventDefault();cancel()});
 
 /* ============ BOUCLE ============ */
@@ -565,13 +675,14 @@ let last=performance.now();
 function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;const t=now/1000;
   stepTweens(dt);
   camNow.lerp(CAMPOS[camMode],1-Math.exp(-dt*5));cam.position.copy(camNow);cam.lookAt(0,0,camMode?0.9:1.5);cam.updateMatrixWorld();
-  const cp=cellPos(G.cur.c,G.cur.r,0.05+Math.sin(t*5)*.03);cursor.position.copy(cp);cursor.visible=G.phase!=='draft'&&G.phase!=='over';
+  const cp=cellPos(G.cur.c,G.cur.r,0.05+Math.sin(t*5)*.03);cursor.position.copy(cp);cursor.visible=G.phase!=='menu'&&G.phase!=='pick'&&G.phase!=='over';
   cursor.material.color.setHex(G.busy?0x777777:0xffb42e);
   if(G.sel&&G.sel.alive){selRing.visible=true;selRing.position.copy(G.sel.mesh.position);selRing.position.y+=0.16;selRing.rotation.y=t}else selRing.visible=false;
   tk.rotation.y=t*2;tk.position.y=0.55+Math.sin(t*3)*.07;tkr.rotation.z=t;
   for(const u of G.units){if(!u.alive)continue;const b=u.mesh.userData.body;b.position.y=Math.sin(t*2+u.id)*.03;if(u.mesh.userData.ring)u.mesh.userData.ring.rotation.z=t*1.5;
     const dim=u.played?.45:1;for(const m of u.mesh.userData.mats)m.color.copy(m.userData.col).multiplyScalar(dim)}
+  if(G.phase==='play'&&G.bot&&G.turnPlayer===1&&G.mode==='idle'&&!G.busy&&!G.botRun)botTurn();
   paintHL();renderer.render(scene,cam);renderBadges();requestAnimationFrame(frame)}
 
-resize();renderKeys();startDraft();requestAnimationFrame(frame);
+resize();renderKeys();startMenu();requestAnimationFrame(frame);
 </script>
