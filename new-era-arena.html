@@ -122,6 +122,7 @@ kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;bo
 .pc em{position:absolute;top:5px;right:8px;font-size:10px;font-style:normal;color:var(--amber);font-weight:700}
 .sv{display:flex;gap:10px;font-family:var(--mono);font-weight:700;font-size:13px;margin-top:2px} .sv i{font-style:normal}
 .pinfo{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--cc);border-radius:8px;padding:8px 12px;margin-top:8px}
+.bud{margin-left:14px;font-size:18px;color:var(--amber);letter-spacing:.05em} .bud.over{color:#ff6b6b} .pcs{color:var(--amber);font-size:10px;letter-spacing:0;margin-left:auto;font-weight:500} .pc.costly{opacity:.4}
 .pinfo h3{margin:0 0 3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap} .stars{color:var(--amber);font-size:12px;letter-spacing:1px}
 @media (min-width:1101px){#dock{width:min(820px,calc(100% - 600px))}}
 @media (max-width:1100px){.roster{display:none}#keys{display:none}}
@@ -418,7 +419,7 @@ const REIN=[
 const newDeck=()=>shuffle([...REIN,...REIN].map(c=>({...c})));
 
 /* ============ ÉTAT ============ */
-const G={bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,phase:'menu',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
+const G={budget:14,bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,phase:'menu',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
   cur:{c:3,r:6},hl:new Map(),solo:new Set(),token:null,hand:[[],[]],deck:[newDeck(),newDeck()],ult:[false,false],
   picks:[[],[]],dstep:0,dsel:0,pl:0,cardIdx:0,nid:1,over:null};
 const alive=t=>G.units.filter(u=>u.alive&&u.team===t);
@@ -751,21 +752,26 @@ function showMenu(){const ov=$('#overlay');ov.className='on';
   ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> Arena</h1><p>Duel tactique au tour par tour. Chaque camp compose une équipe de 4 personnages, un par classe.</p>
    <div class="modes"><div class="mode ${G.menuSel===0?'sel':''}" data-m="0"><h2><kbd>1</kbd> Deux joueurs</h2><p>Blancs et Noirs jouent chacun leur tour sur le même clavier.</p></div>
    <div class="mode ${G.menuSel===1?'sel':''}" data-m="1"><h2><kbd>2</kbd> Contre le bot</h2><p>Tu joues les Blancs. Le bot (niveau facile) joue les Noirs : il hésite, se trompe et attaque sans stratégie.</p></div></div>
-   <div class="ovbar"><span><kbd>←</kbd> <kbd>→</kbd> choisir</span><span><kbd>Entrée</kbd> continuer</span><span><kbd>B</kbd> Variante avancée : <b style="color:var(--amber)">${G.variant?'ACTIVE':'désactivée'}</b></span></div></div>`;
+   <div class="ovbar"><span><kbd>←</kbd> <kbd>→</kbd> choisir</span><span><kbd>Entrée</kbd> continuer</span><span><kbd>B</kbd> Variante avancée : <b style="color:var(--amber)">${G.variant?'ACTIVE':'désactivée'}</b></span><span><kbd>L</kbd> Équilibrage des équipes : <b style="color:var(--amber)">${BUDGETS.find(b=>b[0]===G.budget)[1]}</b></span></div><p style="margin-top:10px">Chaque personnage vaut de 1 à 5 étoiles. Le total d'étoiles d'une équipe ne peut pas dépasser la limite : les deux camps ont le même budget.</p></div>`;
   ov.querySelectorAll('.mode').forEach(el=>el.onclick=()=>{G.menuSel=+el.dataset.m;menuGo()})}
 function menuGo(){G.bot=G.menuSel===1;startPick()}
 function startPick(){G.phase='pick';G.pickTeam=0;G.ptab='A';G.pidx=0;G.picks=[[],[]];showPick();refresh()}
+const BUDGETS=[[99,'Libre'],[16,'Large · 16 ★'],[14,'Standard · 14 ★'],[12,'Strict · 12 ★']];
+const teamStars=(t,except)=>G.picks[t].filter(x=>x.cls!==except).reduce((a,x)=>a+x.stars,0);
+const minStars=(cls,t)=>Math.min(...poolOf(cls).filter(d=>{const o=takenBy(d);return o<0||o===t}).map(d=>d.stars));
+function canPick(d,t){let tot=teamStars(t,d.cls)+d.stars;for(const c of ORDER)if(c!==d.cls&&!G.picks[t].some(x=>x.cls===c))tot+=minStars(c,t);return tot<=G.budget}
 const takenBy=d=>G.picks[0].includes(d)?0:G.picks[1].includes(d)?1:-1;
 const poolOf=c=>CHARS.filter(d=>d.cls===c);
 function showPick(){const ov=$('#overlay');ov.className='on';const t=G.pickTeam,mine=G.picks[t],list=poolOf(G.ptab);G.pidx=Math.max(0,Math.min(list.length-1,G.pidx));const cur=list[G.pidx];
   const prevScroll=(ov.querySelector('.pgrid')||{}).scrollTop||0;
   const slot=c=>{const d=mine.find(x=>x.cls===c);return`<div class="slot ${d?'':'empty'}" style="--cc:${CLS[c].c}"><small>${CLS[c].n}</small>${d?`<b>${d.name}</b>`:'—'}</div>`};
-  const st=d=>`<span class="sv"><i style="color:#ee7b6e">${d.atk}</i><i style="color:#6aa8ff">${d.def}</i><i style="color:#c48cff">${d.hab}</i><i style="color:#ffd05a">${d.pre}</i></span>`;
-  ov.innerHTML=`<div class="ov pk"><div class="pkhead"><h1>${t===0?'Blancs':'Noirs'} <span>: compose ton équipe</span></h1>
+  const stt=d=>'★'.repeat(d.stars);
+  const st=d=>`<span class="sv"><i style="color:#ee7b6e">${d.atk}</i><i style="color:#6aa8ff">${d.def}</i><i style="color:#c48cff">${d.hab}</i><i style="color:#ffd05a">${d.pre}</i><i class="pcs">${stt(d)}</i></span>`;
+  ov.innerHTML=`<div class="ov pk"><div class="pkhead"><h1>${t===0?'Blancs':'Noirs'} <span>: compose ton équipe</span><span class="bud ${teamStars(t)>G.budget?'over':''}">★ ${teamStars(t)}${G.budget<99?' / '+G.budget:''}</span></h1>
    <div class="slots">${ORDER.map(slot).join('')}</div>
    <div class="tabs">${ORDER.map((c,i)=>`<button class="tab ${c===G.ptab?'on':''}" data-c="${c}" style="--cc:${CLS[c].c}"><kbd>${i+1}</kbd> ${CLS[c].n}</button>`).join('')}<span class="grow"></span>
    <button class="btn" id="pRand"><kbd>R</kbd>Au hasard</button><button class="btn" id="pOk" ${mine.length===4?'':'disabled'}><kbd>C</kbd>Valider l'équipe</button></div></div>
-   <div class="pgrid">${list.map((d,i)=>{const o=takenBy(d);return`<div class="pc ${i===G.pidx?'cur':''} ${mine.includes(d)?'mine':''} ${o>=0&&o!==t?'gone':''}" data-i="${i}" style="--cc:${CLS[d.cls].c}"><b>${d.name}</b><small>${d.sub} · #${String(d.num).padStart(3,'0')}</small>${st(d)}${o>=0&&o!==t?'<em>Pris</em>':''}</div>`}).join('')}</div>
+   <div class="pgrid">${list.map((d,i)=>{const o=takenBy(d);return`<div class="pc ${i===G.pidx?'cur':''} ${mine.includes(d)?'mine':''} ${o>=0&&o!==t?'gone':''} ${o<0||o===t?(canPick(d,t)?'':'costly'):''}" data-i="${i}" style="--cc:${CLS[d.cls].c}"><b>${d.name}</b><small>${d.sub} · #${String(d.num).padStart(3,'0')}</small>${st(d)}${o>=0&&o!==t?'<em>Pris</em>':(!canPick(d,t)&&!mine.includes(d)?'<em>Trop cher</em>':'')}</div>`}).join('')}</div>
    <div class="pinfo" style="--cc:${CLS[cur.cls].c}"><h3>${cur.name} <span class="chip">${CLS[cur.cls].n} · ${cur.sub}</span> <span class="stars">${'★'.repeat(cur.stars)}</span></h3>
    <div class="stats"><span>ATK <b>${cur.atk}</b></span><span>DEF <b>${cur.def}</b></span><span>HAB <b>${cur.hab}</b></span><span>PRE <b>${cur.pre}</b></span></div>
    <div class="abil">${cur.power?`<b>Pouvoir · ${cur.power}</b><br>`:''}<b>${cur.ab.n}</b> — ${cur.ab.x}<br><b>Ultime · ${cur.ul.n}</b> — ${cur.ul.x}${G.variant?`<br><b>${cur.sub}</b> — ${SUBTXT[cur.sub]}`:''}</div></div>
@@ -776,10 +782,12 @@ function showPick(){const ov=$('#overlay');ov.className='on';const t=G.pickTeam,
   $('#pRand').onclick=pickRandom;$('#pOk').onclick=pickConfirm}
 function pickHere(){const t=G.pickTeam,d=poolOf(G.ptab)[G.pidx],o=takenBy(d);
   if(o>=0&&o!==t){toast('Déjà pris par l\'autre camp');return showPick()}
+  if(!canPick(d,t)){toast('Budget d\'étoiles dépassé : choisis un personnage moins fort');return showPick()}
   G.picks[t]=G.picks[t].filter(x=>x.cls!==d.cls);G.picks[t].push(d);
   const nx=ORDER.find(c=>!G.picks[t].some(x=>x.cls===c));if(nx){G.ptab=nx;G.pidx=0}showPick()}
-function pickRandom(){const t=G.pickTeam;for(const c of ORDER){if(G.picks[t].some(x=>x.cls===c))continue;const av=poolOf(c).filter(d=>takenBy(d)<0);G.picks[t].push(av[Math.floor(Math.random()*av.length)])}showPick()}
+function pickRandom(){const t=G.pickTeam;for(const c of shuffle([...ORDER])){if(G.picks[t].some(x=>x.cls===c))continue;const av=poolOf(c).filter(d=>takenBy(d)<0&&canPick(d,t));G.picks[t].push(av[Math.floor(Math.random()*av.length)])}showPick()}
 function pickConfirm(){const t=G.pickTeam;if(G.picks[t].length<4){toast('Il faut un personnage par classe');return}
+  if(teamStars(t)>G.budget){toast('Budget d\'étoiles dépassé');return}
   G.picks[t].sort((a,b)=>ORDER.indexOf(a.cls)-ORDER.indexOf(b.cls));
   if(t===0){G.pickTeam=1;G.ptab='A';G.pidx=0;if(G.bot){pickRandom();pickConfirm();return}showPick()}
   else{$('#overlay').className='';startPlacement()}}
@@ -873,6 +881,7 @@ addEventListener('keydown',e=>{
     else if(k==='1'||k==='2'){G.menuSel=+k-1;menuGo()}
     else if(k==='enter'||k===' ')menuGo();
     else if(k==='b'){G.variant=!G.variant;showMenu()}
+    else if(k==='l'){const i=BUDGETS.findIndex(b=>b[0]===G.budget);G.budget=BUDGETS[(i+1)%BUDGETS.length][0];showMenu()}
     return}
   if(G.phase==='pick'){pickKey(k,e);return}
   if(G.phase==='over'){if(k==='enter'){$('#overlay').className='';startMenu()}return}
