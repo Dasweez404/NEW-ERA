@@ -255,6 +255,15 @@ const B={
  steal:(n,dm=0)=>TGT(n,`Cible à portée : retire ses effets et bonus${dm?`, −${dm} PV`:''} ; le lanceur gagne +1 ATK et +1 DEF ce tour.`,async(u,t)=>{t.effect=null;t.buffs=t.buffs.filter(b=>b.v<0);addBuff(u,'atk',1,'self',u);addBuff(u,'def',1,'self',u);if(dm)await dmg(t,dm,u);refresh()})
 };
 const PRE2=PRE1;
+/* capacité à jet de dé : réussit si le dé tombe dans [lo,hi] ; bad = effet de contrecoup sur un 1 */
+const DIE=(spec,lo,hi=6,o={})=>{const die=o.die||6,rg=hi>=die?`${lo}+`:`${lo}-${hi}`;
+  return{...spec,x:`d${die} ${rg} : ${spec.x}`,run:async(u,tg)=>{let r=die===6?d6():d3();
+    if(die===6&&G.variant&&u.flags&&u.flags.rerollAb){u.flags.rerollAb=false;r=Math.max(r,d6());log('Performer : relance conservée')}
+    pop(u,`d${die} : ${r}`,'#ffb42e');log(`${u.d.name} lance un d${die} : <span class="r">${r}</span> (il faut ${rg})`);await sleep(450);
+    if(r>=lo&&r<=hi)await spec.run(u,tg);
+    else{pop(u,'Échec','#ff9a9a');log(`${u.d.name} rate sa capacité`);if(o.bad&&r===1)await o.bad(u,tg)}}}};
+/* passif : remplace la capacité, toujours actif (bonus de stats, aura, immunité, épines, régénération) */
+const PAS=(n,x,o)=>({n,t:'passive',passive:true,x,...o});
 /* traits animaux : [capacité, ultime] selon le comportement de l'animal */
 const TRAIT={
  flight:a=>[B.dash(`Envol · ${a}`,3),B.strike(`Piqué · ${a}`,5,1)],
@@ -277,7 +286,7 @@ const POW={
  1:['Foudre olympienne',B.eff('Foudre','stun',4),B.aoe('Fureur de Zeus','stun',3,1)],
  2:['Reine de l\'Olympe',B.allyAoe('Voile protecteur',[['def',1]],2),B.aoe('Jalousie divine','disrupt',3)],
  3:['Mers & tempêtes',B.aoe('Marée','numb',PRE1),B.aoe('Raz-de-marée',null,4,1)],
- 4:['Royaume des morts',B.drain('Âmes captives'),B.hit('Jugement dernier',2,{far:6})],
+ 4:['Royaume des morts',B.drain('Âmes captives'),DIE(B.hit('Jugement dernier',3,{far:6}),4)],
  5:['Stratégie divine',B.self('Formation en tortue',[['def',2]]),B.allyAoe('Plan de bataille',[['atk',1],['def',1]],99)],
  6:['Charme',B.eff('Charme','numb'),B.healAoe('Baiser d\'amour')],
  7:['Guerre',B.self('Soif de sang',[['atk',2]]),B.aoe('Cri de guerre','stun',PRE1,1)],
@@ -289,7 +298,7 @@ const POW={
  13:['Forge divine',B.eff('Fer rouge','burn'),B.allyAoe('Armes forgées',[['atk',1],['def',1]],99,'round')],
  14:AN('Loup','pack'),
  15:['Air',B.eff('Rafale','numb'),B.aoe('Tornade','stun',3)],
- 16:['Logique inversée',B.swap('Absurdité'),B.aoe('Paradoxe','disrupt',PRE1)],
+ 16:['Logique inversée',DIE(B.swap('Absurdité'),3),B.aoe('Paradoxe','disrupt',PRE1)],
  17:['Mouvement',B.ally('Accélération','hab',2,'round'),B.aoeDeb('Ralentissement général','hab',-2,99)],
  18:['Magnétisme',B.pull('Aimant'),B.aoe('Champ magnétique','stun',3)],
  19:['Gaz',B.aoe('Nuage de gaz','jam',2),B.aoe('Gaz toxique','toxic',3)],
@@ -297,8 +306,8 @@ const POW={
  21:['Électricité',B.eff('Décharge','stun',4),B.aoe('Surtension','stun',3,1)],
  23:['Gravité',B.eff('Gravité accrue','numb'),B.aoe('Singularité','numb',4,1)],
  25:['Carcajou + Énergie cinétique',TRAIT.bite('Carcajou')[0],B.hit('Impact différé',2,{far:5})],
- 30:['Temps',B.act('Accélération temporelle',1),B.act('Arrêt du temps',2)],
- 32:['Chance',B.ally('Coup de chance','def',2),B.allyAoe('Jour de veine',[['atk',1],['def',1]],99,'round')],
+ 30:['Temps',B.act('Accélération temporelle',1),DIE(B.act('Arrêt du temps',2),3)],
+ 32:['Chance',DIE(B.ally('Coup de chance','def',2),3,6,{bad:async u=>{addBuff(u,'def',-1,'turn',u);pop(u,'Malchance','#f88')}}),B.allyAoe('Jour de veine',[['atk',1],['def',1]],99,'round')],
  35:AN('Hippopotame','charge'),
  40:['Invisibilité',B.self('Disparition',[['def',2]]),B.strike('Frappe invisible',5,2)],
  41:['Seiche + Éléphant d\'Afrique',TRAIT.spit('Seiche')[0],TRAIT.tank('Éléphant')[1]],
@@ -307,23 +316,23 @@ const POW={
  53:['Période',B.heal('Rajeunissement'),B.aoeDeb('Retour à l\'enfance','atk',-1,4)],
  54:['Tournis',B.aoe('Tournis','numb',1),B.aoe('Cyclone de membres',null,PRE1,1)],
  62:['Perméabilité',B.dash('Traverser les murs',3),B.strike('Surgir de la paroi',4,1)],
- 63:['IA',B.eff('Piratage','jam'),B.aoe('Ransomware','disrupt',3)],
+ 63:['IA',DIE(B.eff('Piratage','jam'),2),B.aoe('Ransomware','disrupt',3)],
  66:AN('Suricate','support'),
  67:['Contraire',B.swap('Inversion'),B.aoeDeb('Contre-pied','def',-1,99)],
  73:['Espace',B.dash('Téléportation',5),B.strike('Distorsion',6,1)],
- 74:['Portail',B.swap('Portails jumeaux',5),B.dash('Grand portail',6)],
+ 74:['Portail',DIE(B.swap('Portails jumeaux',5),2),B.dash('Grand portail',6)],
  84:AN('Veuve noire','venom'),
  87:AN('Rhinocéros','charge'),
  95:['Élastique',B.pull('Bras élastique'),B.aoe('Claque élastique','stun',PRE1)],
  106:['Personnalité IA',B.ally('Programmation','atk',1),B.allyAoe('Mise à jour',[['atk',1]],99,'round')],
  107:A2('Rainette','fast','Rainette','venom'),
  108:['Reflets',B.dash('Saut de reflet',3),B.strike('Coup de miroir',6,2)],
- 109:['Cryptides',B.eff('Cauchemar','disrupt'),B.aoe('Terreur','stun',3)],
+ 109:['Cryptides',DIE(B.eff('Cauchemar','disrupt'),2),B.aoe('Terreur','stun',3)],
  110:AN('Panda','tank'),
  111:AN('Panthère noire','stealth'),
- 118:['Effacement',B.eff('Effacer un pouvoir','disrupt'),B.aoe('Page blanche','disrupt',5)],
+ 118:['Effacement',DIE(B.eff('Effacer un pouvoir','disrupt'),3),B.aoe('Page blanche','disrupt',5)],
  119:AN('Lion','bite'),
- 120:['Piques',B.self('Hérissement',[['def',2]]),B.aoe('Explosion de piques',null,1,1)],
+ 120:['Piques',PAS('Hérissement','Quand il est attaqué, d6 5+ : l\'attaquant perd 1 PV.',{thorns:5}),B.aoe('Explosion de piques',null,1,1)],
  128:['Température froide + Éponge',B.eff('Givre','numb'),B.hit('Restitution des dégâts',2)],
  133:['Sucre',B.self('Sucre rapide',[['hab',2],['atk',1]]),B.self('Overdose de sucre',[['atk',2],['def',1]],1)],
  139:AN('Crocodile du Nil','bite'),
@@ -336,51 +345,51 @@ const POW={
  155:['Écorce',B.self('Armure d\'écorce',[['def',2]]),B.allyAoe('Forêt protectrice',[['def',1]],99)],
  157:['Pierre',B.self('Poing de pierre',[['atk',1],['def',1]]),B.aoe('Éboulement','stun',PRE1,1)],
  165:['Métamorphose',B.dash('Forme de fauve',3,['atk',1]),B.self('Forme bestiale',[['atk',2],['hab',1]])],
- 166:['Ténèbres',B.eff('Voile d\'ombre','disrupt'),B.aoe('Nuit totale','disrupt',4,1)],
+ 166:['Ténèbres',DIE(B.eff('Voile d\'ombre','disrupt'),2),B.aoe('Nuit totale','disrupt',4,1)],
  167:['Ombre',B.dash('Pas d\'ombre',3),B.strike('Lame d\'ombre',6,2)],
  176:['Trou noir',B.pull('Aspiration'),B.aoe('Horizon des événements',null,3,1)],
  177:['Vol de pouvoirs',B.steal('Pickpocket'),B.steal('Casse du siècle',1)],
- 178:['Destruction',B.hit('Poussière',1),B.hit('Anéantissement',2)],
+ 178:['Destruction',DIE(B.hit('Poussière',1),3),DIE(B.hit('Anéantissement',3),4)],
  179:['Ronces',B.eff('Ronces','numb'),B.aoe('Forêt de ronces','numb',PRE1,1)],
  188:AN('Renard','stealth'),
- 189:['Rembobinage',B.heal('Rembobinage'),B.act('Retour en arrière',1)],
- 190:['Métal',B.self('Peau de métal',[['def',2]]),B.self('Armure lourde',[['atk',1],['def',2]],1)],
+ 189:['Rembobinage',B.heal('Rembobinage'),DIE(B.act('Retour en arrière',1),3)],
+ 190:['Métal',PAS('Corps métallique','+1 DEF, immunisé à la Brûlure.',{immune:['burn'],stat:(u,k)=>k==='def'?1:0}),B.self('Armure lourde',[['atk',1],['def',2]],1)],
  200:['Séisme',B.aoe('Secousse','numb',PRE1),B.aoe('Grand séisme','stun',4,1)],
- 201:['Magma',B.eff('Jet de lave','burn'),B.aoe('Éruption','burn',PRE1,1)],
- 202:['Bête',B.self('Monstre craint',[['atk',2]]),B.aoe('Terreur pure','stun',3,1)],
+ 201:['Magma',PAS('Peau de lave','Immunisé à la Brûlure, +1 ATK.',{immune:['burn'],stat:(u,k)=>k==='atk'?1:0}),B.aoe('Éruption','burn',PRE1,1)],
+ 202:['Bête',PAS('Monstre craint','+2 ATK quand il a 2 PV ou moins.',{stat:(u,k)=>k==='atk'&&u.hp<=2?2:0}),B.aoe('Terreur pure','stun',3,1)],
  203:['Climat',B.aoe('Brouillard','jam',3),B.aoe('Tempête','stun',4,1)],
  213:AN('Pygargue à tête blanche','flight'),
  214:['Conscience',B.ally('Insuffler la vie','atk',1),B.allyAoe('Éveil des objets',[['atk',1],['def',1]],99,'round')],
  215:AN('Manchot royal','tank'),
- 218:['Roue',B.dash('Roulade',4),B.strike('Écrasement à roues',5,1)],
+ 218:['Roue',PAS('Roues','+1 HAB en permanence.',{stat:(u,k)=>k==='hab'?1:0}),B.strike('Écrasement à roues',5,1)],
  222:['Transmutation',B.heal('Transmutation'),B.healAoe('Alchimie')],
  223:['Forme arme',B.self('Forme d\'arme',[['atk',2]]),B.blitz('Lame vivante')],
  234:['Air comprimé + Kératine',B.dash('Propulsion d\'air',3),B.strike('Griffes de kératine',4,2)],
- 235:['Vœu',B.heal('Étoile filante'),B.healAoe('Pluie d\'étoiles')],
+ 235:['Vœu',DIE(B.heal('Étoile filante'),2,3,{die:3}),B.healAoe('Pluie d\'étoiles')],
  236:AN('Paon','display'),
- 245:['Poison',B.eff('Fiole toxique','toxic'),B.aoe('Nuage empoisonné','toxic',PRE1,1)],
- 246:['Faufilement',B.dash('Glisser',3,['def',1]),B.strike('Coup de papier',5,2)],
+ 245:['Poison',PAS('Sang toxique','Immunisé au Poison.',{immune:['toxic'],stat:(u,k)=>k==='def'?1:0}),B.aoe('Nuage empoisonné','toxic',PRE1,1)],
+ 246:['Faufilement',PAS('Corps de papier','Immunisé à l\'Engourdissement, +1 HAB.',{immune:['numb'],stat:(u,k)=>k==='hab'?1:0}),B.strike('Coup de papier',5,2)],
  247:['Blueprint',B.eff('Piège fabriqué','numb'),B.aoe('Champ de mines','stun',3,1)],
  257:['Nageoire + Vitesse',B.dash('Coup de nageoire',3,['atk',1]),B.blitz('Vitesse maximale')],
  258:['Rebond',B.self('Bond',[['hab',2],['def',1]]),B.aoe('Sol rebondissant','numb',3)],
- 274:['Aura',B.allyAoe('Aura',[['atk',1]],3),B.allyAoe('Aura maximale',[['atk',1],['def',1],['hab',1]],99,'round')],
- 275:['Champ de force',B.allyAoe('Bulle',[['def',2]],1),B.allyAoe('Dôme',[['def',2]],99)],
+ 274:['Aura',PAS('Aura','Lui et les alliés à ≤2 cases : +1 ATK en permanence.',{aura:{rad:2,k:'atk',v:1}}),B.allyAoe('Aura maximale',[['atk',1],['def',1],['hab',1]],99,'round')],
+ 275:['Champ de force',PAS('Champ de force','Lui et les alliés à ≤1 case : +1 DEF en permanence.',{aura:{rad:1,k:'def',v:1}}),B.allyAoe('Dôme',[['def',2]],99)],
  276:AN('Iguane','bite'),
  277:['Dédoublement',B.blitz('Bras multiples'),B.act('Corps dédoublé',1)],
  278:['Psychokinésie',B.pull('Lévitation'),B.aoe('Tempête psychique','stun',4)],
- 279:['Glace',B.eff('Givre','numb'),B.eff('Prison de glace','frozen')],
+ 279:['Glace',PAS('Corps de givre','Immunisé au Gel et à l\'Engourdissement.',{immune:['frozen','numb']}),DIE(B.eff('Prison de glace','frozen'),3)],
  280:['Ondes physiques',B.aoe('Onde de choc','numb',2),B.aoe('Onde dévastatrice','stun',4,1)],
  281:['Lynx + Subtilisation',TRAIT.stealth('Lynx')[0],B.steal('Subtilisation')],
  288:['Barrière',B.allyAoe('Barrière',[['def',2]],1),B.healAoe('Mur de soin')],
  290:['Éclosion',B.heal('Éclosion revigorante'),B.healAoe('Nuée de bourgeons')],
- 292:['Régénération',B.self('Régénération',[],1),B.self('Renaissance',[['def',1]],2)],
+ 292:['Régénération',PAS('Régénération','Récupère 1 PV à la fin de chaque manche.',{regen:1}),B.self('Renaissance',[['def',1]],2)],
  300:['Eau',B.aoe('Vague','numb',2),B.aoe('Déferlante',null,4,1)],
  301:['Respiration',B.dash('Plongée',3),B.strike('Assaut sous-marin',4,1)],
  302:AN('Orque','bite'),
  306:AN('Ours polaire','tank'),
  313:['Astéroïdes',B.hit('Météorite',1),B.aoe('Pluie d\'astéroïdes',null,4,1)],
- 314:['Esprit',B.swap('Échange d\'esprit'),B.eff('Possession','frozen')],
- 315:['Manipulation mentale',B.eff('Suggestion','jam'),B.eff('Contrôle mental','frozen')],
+ 314:['Esprit',B.swap('Échange d\'esprit'),DIE(B.eff('Possession','frozen'),3)],
+ 315:['Manipulation mentale',B.eff('Suggestion','jam'),DIE(B.eff('Contrôle mental','frozen'),3)],
  323:['Dragon de Komodo + Ailes',TRAIT.venom('Komodo')[0],TRAIT.flight('Ailes')[1]],
  324:['Tigre + Pierre',TRAIT.stealth('Tigre')[0],B.aoe('Éboulement de pierre','stun',PRE1,1)],
  325:['Buffle + Durcissement',TRAIT.charge('Buffle')[0],B.self('Corps invincible',[['atk',1],['def',3]])],
@@ -391,7 +400,7 @@ const POW={
  337:AN('Mandrill','pack'),
  347:['Acide',B.deb('Corrosion','def',-1),B.aoe('Pluie acide',null,4,1)],
  348:AN('Piranha','bite'),
- 349:['Rêves',B.eff('Somnolence','numb'),B.eff('Sommeil profond','frozen')],
+ 349:['Rêves',B.eff('Somnolence','numb'),DIE(B.eff('Sommeil profond','frozen'),3)],
  350:['Forme maxi',B.self('Croissance',[['atk',2],['def',1]]),B.aoe('Piétinement de géant','stun',PRE1,1)],
  351:['État',B.eff('Solidification','numb'),B.aoe('Changement d\'état','stun',PRE1)],
  360:['Lumière',B.eff('Éblouissement','disrupt'),B.aoe('Éclat solaire','disrupt',4,1)],
@@ -399,10 +408,10 @@ const POW={
  362:AN('Varan','venom'),
  363:['Ailes',B.dash('Battement d\'ailes',4),B.strike('Piqué',5,1)],
  364:AN('Coati','fast'),
- 365:['Durcissement',B.self('Peau durcie',[['def',2]]),B.self('Invincible',[['atk',1],['def',3]])],
- 373:['Muscles',B.self('Gonflette',[['atk',2]]),B.blitz('Déchaînement')],
- 374:['Feu',B.eff('Boule de feu','burn'),B.aoe('Brasier','burn',PRE1,1)],
- 375:['Réalité',B.dash('Copier-coller',4),B.act('Annuler',2)],
+ 365:['Durcissement',PAS('Peau durcie','+1 DEF en permanence.',{stat:(u,k)=>k==='def'?1:0}),B.self('Invincible',[['atk',1],['def',3]])],
+ 373:['Muscles',PAS('Muscles','+1 ATK en permanence.',{stat:(u,k)=>k==='atk'?1:0}),B.blitz('Déchaînement')],
+ 374:['Feu',PAS('Corps ardent','Immunisé à la Brûlure.',{immune:['burn']}),B.aoe('Brasier','burn',PRE1,1)],
+ 375:['Réalité',B.dash('Copier-coller',4),DIE(B.act('Annuler',2),3)],
  376:AN('Cerf','charge')
 };
 const RAW=[[0,"Néo","Performer",3,4,2,3,5],[1,"Zeus","Brawler",4,3,3,2,5],[2,"Héra","Engineer",3,3,2,3,4],[3,"Poséidon","Protector",2,4,3,2,4],[4,"Hadès","Ranger",3,2,2,4,4],[5,"Athéna","Protector",3,4,1,2,3],[6,"Aphrodite","Assist",2,3,2,3,3],[7,"Arès","Juggernaut",4,3,2,1,3],[8,"Apollo","Assist",2,2,3,3,3],[9,"Déméter","Ranger",2,2,2,4,3],[10,"Hermès","Flanker",3,1,4,2,3],[11,"Dionysos","Brawler",3,3,1,2,3],[12,"Cérès","Flanker",3,2,3,2,3],[13,"Héphaistos","Engineer",4,3,1,2,3],[14,"Moon Fang","Juggernaut",3,4,2,1,3],[15,"Vortex","Ranger",2,1,3,4,3],[16,"Brainless","Performer",2,2,3,3,3],[17,"Move","Assist",3,2,2,3,3],[18,"Magnet","Protector",2,4,1,3,3],[19,"Scatter","Assist",3,2,3,2,3],[20,"Viscous","Protector",3,3,2,2,3],[21,"Blackout","Flanker",3,2,4,2,4],[23,"Hover","Ranger",2,3,2,3,3],[25,"Kinetic","Ranger",3,1,2,4,3],[30,"Mr.Midnight","Performer",3,3,2,3,4],[32,"Chance","Assist",3,3,1,3,3],[35,"Miziki","Juggernaut",3,4,1,2,3],[40,"Diaphane","Flanker",3,3,3,2,4],[41,"Italanta","Juggernaut",3,4,1,2,3],[51,"Captain Diziiz","Engineer",4,3,2,2,4],[52,"Lann","Protector",3,3,2,2,3],[53,"Dr.Fank","Assist",3,3,2,2,3],[54,"Turni","Brawler",4,2,2,2,3],[62,"Cracken","Assist",3,2,3,3,4],[63,"Zero Day","Flanker",2,2,3,3,3],[66,"Rooter","Engineer",3,2,3,1,2],[67,"Smish","Assist",2,3,2,2,2],[73,"Kasuf","Flanker",3,3,4,1,4],[74,"Passage","Ranger",2,2,2,4,3],[84,"Venena","Ranger",3,1,3,4,4],[87,"Pembe","Engineer",3,3,2,2,3],[95,"Gummi","Protector",3,3,2,3,4],[106,"Bot","Assist",2,3,2,2,1],[107,"Alíngua","Flanker",3,2,3,3,4],[108,"Dugalen","Ranger",3,2,1,4,3],[109,"Monstruo","Performer",3,3,3,1,3],[110,"Zhúzi","Juggernaut",4,3,2,1,3],[111,"Khama","Brawler",3,2,3,2,3],[118,"Apagar","Assist",3,3,2,3,4],[119,"Shars","Brawler",4,3,2,1,3],[120,"Qima","Juggernaut",3,3,3,1,3],[128,"Gurume","Brawler",3,4,3,1,4],[133,"Lecker","Protector",3,3,2,1,2],[139,"Breakbone","Juggernaut",3,4,3,1,4],[140,"Ramil","Performer",3,3,2,2,3],[141,"Icetooth","Protector",3,3,1,3,3],[143,"Boneka","Brawler",2,3,2,3,3],[144,"Tinard","Protector",2,4,2,1,2],[152,"Arwat","Assist",2,4,3,2,4],[154,"Veibuca","Ranger",3,2,2,3,3],[155,"Bellen","Protector",2,3,2,3,3],[157,"Bato","Brawler",3,3,2,2,2],[165,"Morfosia","Performer",2,3,3,3,4],[166,"Muerta","Performer",3,2,3,2,3],[167,"Alzali","Ranger",3,2,2,3,3],[176,"Ahri","Juggernaut",3,4,2,2,4],[177,"Volé","Assist",3,3,3,2,4],[178,"Vacía","Performer",4,4,2,1,4],[179,"Meno","Brawler",3,4,1,2,3],[188,"Chitry","Flanker",4,3,3,1,4],[189,"Rebob","Performer",2,2,3,3,3],[190,"Logam","Juggernaut",3,4,2,1,3],[200,"Trake","Brawler",4,3,1,3,4],[201,"Pélé","Performer",4,3,2,2,4],[202,"Belzébuth","Juggernaut",4,4,2,1,4],[203,"Hörmung","Performer",4,2,3,2,4],[213,"Sharp","Brawler",3,2,3,3,4],[214,"Jinsei","Engineer",3,2,3,2,3],[215,"Alf","Protector",2,3,3,2,3],[218,"Big Wheel","Flanker",2,2,3,2,2],[222,"Ban-Cheol","Assist",3,3,3,2,4],[223,"Shinda","Performer",2,2,3,3,3],[234,"Panja","Performer",3,4,2,2,4],[235,"Inkho","Assist",2,3,2,4,3],[236,"Rang","Ranger",3,2,2,3,3],[245,"Otrava","Brawler",4,3,2,2,4],[246,"Sneaka","Flanker",3,3,3,2,4],[247,"Crâne","Ranger",3,1,3,3,3],[257,"Rènào","Flanker",3,3,4,1,4],[258,"Jog","Protector",3,4,2,1,3],[274,"Ora","Performer",3,3,3,2,4],[275,"Dafa","Protector",2,4,2,2,3],[276,"Guano","Brawler",4,3,2,1,3],[277,"Multi","Juggernaut",3,3,2,2,3],[278,"Levit","Juggernaut",3,3,1,3,3],[279,"Rozko","Flanker",3,2,3,2,3],[280,"Myrsky","Engineer",3,2,2,3,3],[281,"Desgarra","Ranger",3,1,3,3,3],[288,"Tabib","Protector",3,4,2,2,4],[290,"Rescate","Performer",2,2,2,4,3],[292,"Kokal","Juggernaut",2,4,2,2,3],[300,"Kuini Wai","Protector",3,4,2,2,4],[301,"Tuba","Flanker",2,3,3,2,3],[302,"Natsi","Juggernaut",3,3,3,1,3],[306,"Nanook","Brawler",3,3,2,2,3],[313,"Milaza","Ranger",2,3,2,4,4],[314,"Anma","Flanker",3,2,3,2,3],[315,"Djinn","Assist",2,2,3,3,3],[323,"Naga","Protector",3,3,3,3,5],[324,"Sanjin","Brawler",4,3,2,2,4],[325,"Pembe","Protector",3,4,2,2,4],[326,"Hun","Flanker",3,2,4,2,4],[334,"Tangaroa","Juggernaut",4,4,3,1,5],[335,"Nabsi","Engineer",3,2,3,3,4],[336,"Fumar","Flanker",3,3,3,2,4],[337,"Oum-Oum","Ranger",2,2,3,4,4],[347,"Silla","Engineer",3,4,3,2,5],[348,"Frasco","Engineer",2,4,2,3,4],[349,"Mriya","Flanker",2,2,4,3,4],[350,"Giganto","Brawler",4,3,2,2,4],[351,"Mêlée","Juggernaut",2,3,2,3,3],[360,"Héméra","Flanker",2,2,4,4,5],[361,"Random","Ranger",3,2,2,4,4],[362,"Kaï","Juggernaut",3,4,2,2,4],[363,"Hokioi","Flanker",2,3,4,2,4],[364,"Nasua","Flanker",2,2,3,3,3],[365,"Tasalub","Protector",4,4,1,1,3],[373,"Black.1","Brawler",4,4,2,2,5],[374,"Red.2","Flanker",4,2,3,2,4],[375,"Green.3","Performer",3,2,3,3,4],[376,"Blue.4","Juggernaut",3,3,3,2,4]];
@@ -427,7 +436,10 @@ const G={budget:14,bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,p
   picks:[[],[]],dstep:0,dsel:0,pl:0,cardIdx:0,nid:1,over:null};
 const alive=t=>G.units.filter(u=>u.alive&&u.team===t);
 const unitAt=(c,r)=>G.units.find(u=>u.alive&&u.c===c&&u.r===r);
-function stat(u,k){let v=u.d[k];for(const b of u.buffs)if(b.k===k)v+=b.v;return Math.max(1,v)}
+function stat(u,k){let v=u.d[k];for(const b of u.buffs)if(b.k===k)v+=b.v;
+  const p=u.d.ab;if(p.passive&&p.stat)v+=p.stat(u,k)||0;
+  for(const a of G.units){const q=a.d.ab;if(a.alive&&a.team===u.team&&q.passive&&q.aura&&q.aura.k===k&&cheb(a,u)<=q.aura.rad)v+=q.aura.v}
+  return Math.max(1,v)}
 const sub=u=>G.variant&&u.d.sub;
 
 /* ============ THREE.JS ============ */
@@ -566,6 +578,7 @@ function addBuff(u,k,v,until,src){u.buffs.push({k,v,until,src:src.id});ringFx(u.
 function heal(u,n){const b=u.hp;u.hp=Math.min(4,u.hp+n);if(u.hp>b){pop(u,'+'+(u.hp-b)+' PV','#5fe0a5');burst(feet(u),0x5fe0a5,12,{speed:.7,up:2.6,g:-2,size:.1,life:.9});ringFx(u.mesh.position,0x5fe0a5,1.2,.5);hop(u,.2,.3);log(`${u.d.name} récupère ${u.hp-b} PV`);if(u.effect&&u.effect.type==='toxic')u.effect=null}refresh()}
 function cleanse(u){if(u.effect){pop(u,'Purgé','#5fe0a5');u.effect=null}refresh()}
 async function addEff(t,type,src){
+  const ps=t.d.ab;if(ps.passive&&ps.immune&&ps.immune.includes(type)){pop(t,'Immunisé','#9cf');log(`${t.d.name} est immunisé (${EFF[type][1]})`);ringFx(t.mesh.position,0x9cf0ff,1.1,.35);return}
   if(t.effect&&t.effect.src!==src.id){pop(t,'Déjà affecté','#aaa');log(`${t.d.name} a déjà un effet`);return}
   t.effect={type,src:src.id,left:type==='toxic'?2:1};burst(chest(t),FXCOL[type],14,{speed:1.4,up:2.4,g:-.5,life:.8});ringFx(t.mesh.position,FXCOL[type],1.2,.5);t.squash=.3;pop(t,EFF[type][0]+' '+EFF[type][1],'#ffd27a');log(`${t.d.name} : ${EFF[type][0]} ${EFF[type][1]}`);refresh();await sleep(250)}
 async function dmg(t,n,src,fromCombat=false){
@@ -609,6 +622,7 @@ function reachable(u){
   return out}
 function pathTo(u,reach,dest){const p=[];let k=KEY(dest.c,dest.r);while(k&&k!==KEY(u.c,u.r)){const n=reach.get(k);p.unshift([n.c,n.r]);k=n.prev}return p}
 function targetsFor(u,s){
+  if(s.passive)return[];
   if(s.t==='enemy')return alive(1-u.team).filter(t=>s.far?(cheb(u,t)<=s.far&&(!s.adj||freeAdj(t).length)&&(!s.adjSelf||freeAdj(u).length)):rangeState(u,t)===1);
   if(s.t==='ally')return alive(u.team).filter(t=>t===u||cheb(u,t)<=stat(u,'pre')+(isStruct(u.c,u.r)?1:0));
   if(s.t==='cell'){const o=[],cr=typeof s.cell==='function'?s.cell(u):s.cell;for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(!unitAt(c,r)&&cheb(u,{c,r})<=cr)o.push({c,r});return o}
@@ -625,6 +639,11 @@ async function showDice(att,def,A,D,verdict){const el=$('#dice');el.hidden=false
   for(let i=0;i<9;i++){paintDice(att,def,rollSet(A.length),rollSet(D.length));await sleep(65)}
   paintDice(att,def,A,D,verdict,true);await sleep(900);showDice.h=setTimeout(()=>el.hidden=true,2200)}
 async function combat(att,def){
+  const res=await combat0(att,def);
+  const th=def.d.ab.passive&&def.d.ab.thorns;
+  if(th&&def.alive&&att.alive){const r=d6();pop(def,`Piques d6 : ${r}`,'#ffb42e');log(`${def.d.name} (passif ${def.d.ab.n}) : d6 = <span class="r">${r}</span>`);if(r>=th)await dmg(att,1,def)}
+  return res}
+async function combat0(att,def){
   let A=rollSet(stat(att,'atk')),D=rollSet(stat(def,'def'));
   if(sub(att)==='Brawler'&&att.flags.rerollAtk){att.flags.rerollAtk=false;if(A[0]<=3){const o=A[0];A[0]=d6();log(`Brawler relance son d6 (${o} → ${A[0]})`)}}
   const sa=sum(A),sd=sum(D);
@@ -647,8 +666,11 @@ function selectUnit(u){hop(u,.3,.32);ringFx(u.mesh.position,0xffb42e,1.1,.4);G.s
   G.actions=(u.effect&&u.effect.type==='stun')?1:2;G.mode=(u.effect&&u.effect.type==='frozen')?'frozen':'sel';
   if(G.actions===1)toast('Assommé : une seule action ce tour');recalc();refresh()}
 function commit(){if(G.committed)return;G.committed=true;const u=G.sel;u.buffs=u.buffs.filter(b=>!(b.until==='turn'&&b.src===u.id))}
+const noMoreActions=()=>G.sel&&G.mode!=='frozen'&&!['move','atk','abl','ult','card'].some(c=>can(c)[0]);
 async function after(){G.busy=false;if(G.phase==='over')return;
-  if(G.actions<=0&&!(G.sel.freeAtk>0&&attackTargets(G.sel).length)){await sleep(300);await endTurn()}else{G.mode='sel';recalc();refresh()}}
+  if(G.actions<=0&&!(G.sel.freeAtk>0&&attackTargets(G.sel).length)){await sleep(300);await endTurn()}
+  else{G.mode='sel';recalc();refresh();if(noMoreActions()){toast('Plus d\'action possible : fin du tour');G.busy=true;await sleep(700);await endTurn()}}}
+async function autoEndIfStuck(){if(G.sel&&G.mode==='sel'&&noMoreActions()){toast('Aucune action possible : fin du tour');G.busy=true;await sleep(900);await endTurn()}}
 async function endTurn(){const u=G.sel;if(!u||G.busy&&false)return;G.busy=true;
   u.played=true;u.buffs=u.buffs.filter(b=>b.until!=='self');u.freeAtk=0;
   if(u.effect&&['stun','numb','disrupt','jam','frozen'].includes(u.effect.type))u.effect=null;
@@ -662,6 +684,7 @@ async function endRound(){
     if(u.effect.type==='toxic'){log(`${u.d.name} souffre du poison`);const l=--u.effect.left;await dmg(u,1,null);if(u.alive&&l<=0)u.effect=null}
     else if(u.effect.type==='burn'){const r=d6();log(`Brûlure de ${u.d.name} : d6 = ${r}`);if(r<=3){u.effect=null;pop(u,'Éteint','#9cf')}else await dmg(u,1,null)}
     if(G.phase==='over')return}
+  for(const u of G.units)if(u.alive&&u.d.ab.passive&&u.d.ab.regen&&u.hp<4){log(`${u.d.name} : passif ${u.d.ab.n}`);heal(u,u.d.ab.regen)}
   G.units.forEach(u=>u.buffs=u.buffs.filter(b=>b.until!=='round'));
   await sleep(250);beginRound()}
 
@@ -672,7 +695,7 @@ function can(cmd){const u=G.sel;if(!u)return[false,'Aucun personnage'];if(G.mode
    case'move':if(G.used.move)return[false,'Déjà déplacé'];if(G.actions<=0)return[false,'Plus d\'actions'];if(eff==='numb')return[false,'Engourdi'];if(reachable(u).size<2)return[false,'Aucune case'];return[true];
    case'atk':if(u.freeAtk>0)return attackTargets(u).length?[true]:[false,'Personne à portée'];if(G.used.atk)return[false,'Déjà attaqué'];if(G.actions<=0)return[false,'Plus d\'actions'];
      return attackTargets(u).length?[true]:[false,'Personne à portée'];
-   case'abl':case'ult':{const s=cmd==='abl'?u.d.ab:u.d.ul;if(G.used.abl)return[false,'Capacité déjà utilisée'];if(G.actions<=0)return[false,'Plus d\'actions'];if(eff==='disrupt')return[false,'Bouleversement'];
+   case'abl':case'ult':{const s=cmd==='abl'?u.d.ab:u.d.ul;if(s.passive)return[false,'Passif : toujours actif'];if(G.used.abl)return[false,'Capacité déjà utilisée'];if(G.actions<=0)return[false,'Plus d\'actions'];if(eff==='disrupt')return[false,'Bouleversement'];
      if(cmd==='ult'){if(G.round<2)return[false,'Dès la manche 2'];if(G.ult[u.team])return[false,'Ultime déjà utilisé']}
      return targetsFor(u,s).length?[true]:[false,'Aucune cible']}
    case'card':if(G.used.card)return[false,'1 renfort par tour'];if(!G.hand[u.team].length)return[false,'Aucun renfort'];if(eff==='jam')return[false,'Brouillage'];return[true]}}
@@ -747,12 +770,12 @@ function renderDock(){
   const u=insp,d=u.d;
   info.innerHTML=`<h3 style="--cc:${CLS[d.cls].c}">${d.name}${u.effect?` <span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span>`:''}<span class="chip">${CLS[d.cls].n} · ${d.sub}</span><span style="color:var(--mut);font-weight:500;font-size:12px">${TEAMS[u.team]} · ${hearts(u)} ${u.effect?EFF[u.effect.type][0]+' '+EFF[u.effect.type][1]:''}</span></h3>
    <div class="stats"><span>ATK <b>${stat(u,'atk')}</b></span><span>DEF <b>${stat(u,'def')}</b></span><span>HAB <b>${stat(u,'hab')}</b></span><span>PRE <b>${stat(u,'pre')}</b></span></div>
-   <div class="abil">${d.power?`<b>${d.power.includes(' + ')?'Double pouvoir':'Pouvoir'} · ${d.power}</b><br>`:''}<b>${d.ab.n}</b> — ${d.ab.x}<br><b>Ultime · ${d.ul.n}</b> — ${d.ul.x}${G.variant?`<br><b>${d.sub}</b> — ${SUBTXT[d.sub]}`:''}</div>`;
+   <div class="abil">${d.power?`<b>${d.power.includes(' + ')?'Double pouvoir':'Pouvoir'} · ${d.power}</b><br>`:''}<b>${d.ab.passive?'Passif · ':''}${d.ab.n}</b> — ${d.ab.x}<br><b>Ultime · ${d.ul.n}</b> — ${d.ul.x}${G.variant?`<br><b>${d.sub}</b> — ${SUBTXT[d.sub]}`:''}</div>`;
   if(G.sel!==u||G.phase!=='play'){acts.innerHTML='';pips.innerHTML='';cards.innerHTML='';return}
   const cnt=cmd=>cmd==='atk'?attackTargets(u).length:cmd==='abl'?targetsFor(u,d.ab).length:cmd==='ult'?targetsFor(u,d.ul).length:0;
   const B=(k,label,cmd,on)=>{const[ok,why]=can(cmd);const n=ok&&cnt(cmd);return`<button class="btn ${on?'on':''}" data-cmd="${cmd}" ${ok?'':'disabled'} title="${why||''}"><kbd>${k}</kbd>${label}${n?` <small class="cnt">${n} cible${n>1?'s':''}</small>`:''}${ok?'':` <small style="color:var(--mut)">(${why})</small>`}</button>`};
   acts.innerHTML=G.mode==='frozen'?`<button class="btn" data-cmd="thaw"><kbd>F</kbd>Briser (−1 PV)</button><button class="btn" data-cmd="end"><kbd>E</kbd>Passer</button>`:
-   B(1,'Déplacer','move',G.mode==='move')+B(2,'Attaquer','atk',G.mode==='atk')+B(3,d.ab.n,'abl',G.mode==='abl')+B(4,'Ult · '+d.ul.n,'ult',G.mode==='ult')+B(5,`Renfort (${G.hand[u.team].length})`,'card',G.mode==='card')+`<button class="btn" data-cmd="end"><kbd>E</kbd>Fin de tour</button>`;
+   B(1,'Déplacer','move',G.mode==='move')+B(2,'Attaquer','atk',G.mode==='atk')+B(3,(d.ab.passive?'Passif · ':'')+d.ab.n,'abl',G.mode==='abl')+B(4,'Ult · '+d.ul.n,'ult',G.mode==='ult')+B(5,`Renfort (${G.hand[u.team].length})`,'card',G.mode==='card')+`<button class="btn" data-cmd="end"><kbd>E</kbd>Fin de tour</button>`;
   acts.querySelectorAll('button').forEach(b=>b.onclick=()=>command(b.dataset.cmd));
   pips.innerHTML=`Actions : ${[0,1].map(i=>`<span class="pip ${i<G.actions?'':'off'}"></span>`).join('')}${u.freeAtk>0?` · Blitz : ${u.freeAtk} attaque(s) gratuite(s)`:''}${u.buffs.length?' · Bonus : '+u.buffs.map(b=>`${b.v>0?'+':''}${b.v} ${b.k.toUpperCase()}`).join(', '):''}`;
   const hand=G.hand[u.team];cards.innerHTML=hand.map((c,i)=>`<div class="card ${G.mode==='card'&&i===G.cardIdx?'cur':''}"><b>${c.n}</b><br>${c.x}</div>`).join('')}
@@ -793,7 +816,7 @@ function showPick(){const ov=$('#overlay');ov.className='on';const t=G.pickTeam,
    <div class="pgrid">${list.map((d,i)=>{const o=takenBy(d);return`<div class="pc ${i===G.pidx?'cur':''} ${mine.includes(d)?'mine':''} ${o>=0&&o!==t?'gone':''} ${o<0||o===t?(canPick(d,t)?'':'costly'):''}" data-i="${i}" style="--cc:${CLS[d.cls].c}"><b>${d.name}</b><small>${d.sub} · #${String(d.num).padStart(3,'0')}${d.power&&d.power.includes(' + ')?' · <b style="color:var(--amber)">2 pouvoirs</b>':''}</small>${st(d)}${o>=0&&o!==t?'<em>Pris</em>':(!canPick(d,t)&&!mine.includes(d)?'<em>Trop cher</em>':'')}</div>`}).join('')}</div>
    <div class="pinfo" style="--cc:${CLS[cur.cls].c}"><h3>${cur.name} <span class="chip">${CLS[cur.cls].n} · ${cur.sub}</span> <span class="stars">${'★'.repeat(cur.stars)}</span></h3>
    <div class="stats"><span>ATK <b>${cur.atk}</b></span><span>DEF <b>${cur.def}</b></span><span>HAB <b>${cur.hab}</b></span><span>PRE <b>${cur.pre}</b></span></div>
-   <div class="abil">${cur.power?`<b>${cur.power.includes(' + ')?'Double pouvoir':'Pouvoir'} · ${cur.power}</b><br>`:''}<b>${cur.ab.n}</b> — ${cur.ab.x}<br><b>Ultime · ${cur.ul.n}</b> — ${cur.ul.x}${G.variant?`<br><b>${cur.sub}</b> — ${SUBTXT[cur.sub]}`:''}</div></div>
+   <div class="abil">${cur.power?`<b>${cur.power.includes(' + ')?'Double pouvoir':'Pouvoir'} · ${cur.power}</b><br>`:''}<b>${cur.ab.passive?'Passif · ':''}${cur.ab.n}</b> — ${cur.ab.x}<br><b>Ultime · ${cur.ul.n}</b> — ${cur.ul.x}${G.variant?`<br><b>${cur.sub}</b> — ${SUBTXT[cur.sub]}`:''}</div></div>
    <div class="ovbar"><span><kbd>←↑↓→</kbd> naviguer</span><span><kbd>Tab</kbd>/<kbd>1-4</kbd> classe</span><span><kbd>Entrée</kbd> choisir</span><span><kbd>Retour</kbd> retirer</span></div></div>`;
   const g=ov.querySelector('.pgrid');g.scrollTop=prevScroll;const c=g.children[G.pidx];if(c)c.scrollIntoView({block:'nearest'});
   ov.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{G.ptab=b.dataset.c;G.pidx=0;showPick()});
@@ -880,10 +903,10 @@ async function confirmAct(){
   if(G.busy)return;if(G.phase==='play'&&G.bot&&G.turnPlayer===1)return;const{c,r}=G.cur;
   if(G.phase==='place')return placeHere(c,r);
   if(G.phase!=='play')return;
-  if(G.mode==='idle'){const u=unitAt(c,r);if(u&&u.team===G.turnPlayer&&!u.played)selectUnit(u);else toast(u&&u.played?'Ce personnage a déjà joué cette manche':`Choisis un personnage des ${TEAMS[G.turnPlayer]}`);return}
+  if(G.mode==='idle'){const u=unitAt(c,r);if(u&&u.team===G.turnPlayer&&!u.played){selectUnit(u);autoEndIfStuck()}else toast(u&&u.played?'Ce personnage a déjà joué cette manche':`Choisis un personnage des ${TEAMS[G.turnPlayer]}`);return}
   const u=G.sel,k=KEY(c,r),h=G.hl.get(k),t=unitAt(c,r);
   if(G.mode==='card'){useCard(G.cardIdx);return}
-  if(G.mode==='sel'){if(t&&t!==u&&t.team===u.team&&!t.played&&!G.committed)selectUnit(t);else toast('Choisis une action (1-5)');return}
+  if(G.mode==='sel'){if(t&&t!==u&&t.team===u.team&&!t.played&&!G.committed){selectUnit(t);autoEndIfStuck()}else toast('Choisis une action (1-5)');return}
   if(G.mode==='move'){if(h==='move')return doMove({c,r})}
   else if(G.mode==='atk'){if(t&&h==='atk')return doAttack(t,G.solo.has(k))}
   else if(G.mode==='abl'||G.mode==='ult'){const isU=G.mode==='ult',s=isU?u.d.ul:u.d.ab;
@@ -925,7 +948,7 @@ addEventListener('keydown',e=>{
   if(k==='tab'){const list=alive(G.turnPlayer).filter(u=>!u.played);if(!list.length)return;
     if(G.sel&&G.committed){toast('Termine d\'abord le tour de '+G.sel.d.name);return}
     const cur=list.findIndex(u=>u.c===G.cur.c&&u.r===G.cur.r),n=list[(cur+1)%list.length];G.cur={c:n.c,r:n.r};
-    if(G.sel)selectUnit(n);else refresh();return}
+    if(G.sel){selectUnit(n);autoEndIfStuck()}else refresh();return}
   const cmd={'1':'move','2':'atk','3':'abl','4':'ult','5':'card',e:'end',f:'thaw'}[k];if(cmd)command(cmd)});
 
 // souris
