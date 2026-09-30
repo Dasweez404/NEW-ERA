@@ -128,6 +128,12 @@ kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;bo
 .pinfo{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--cc);border-radius:8px;padding:8px 12px;margin-top:8px}
 .bud{margin-left:14px;font-size:18px;color:var(--amber);letter-spacing:.05em} .bud.over{color:#ff6b6b} .pcs{color:var(--amber);font-size:10px;letter-spacing:0;margin-left:auto;font-weight:500} .pc.costly{opacity:.4}
 .pinfo h3{margin:0 0 3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap} .stars{color:var(--amber);font-size:12px;letter-spacing:1px}
+.fxr-h{display:flex;justify-content:space-between;align-items:center;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:11px;color:var(--mut);cursor:pointer;margin-bottom:4px}
+#fxref{position:absolute;right:10px;bottom:210px;width:212px;max-height:calc(100% - 520px);min-height:60px;overflow:auto;background:#0c0f18d9;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:11px;line-height:1.3}
+#fxref.min .fxr{display:none}
+.fxr{display:grid;grid-template-columns:20px 1fr;gap:0 6px;padding:2px 0;border-top:1px solid #ffffff10;color:var(--mut)} .fxr b{color:var(--txt)} .fxr i{font-style:normal;font-size:14px;grid-row:span 2}
+.fxr.on{background:#3a2f14;border-radius:4px;color:#e9dcb8;box-shadow:inset 3px 0 0 var(--amber);padding-left:4px} .fxr .n{color:var(--amber);font-weight:700;float:right}
+@media (max-height:700px){#fxref{display:none!important}}
 @media (min-width:1101px){#dock{width:min(820px,calc(100% - 600px))}}
 @media (max-width:1100px){.roster{display:none}#keys{display:none}}
 @media (max-width:700px){#log{display:none}#dock{grid-template-columns:1fr}#acts{justify-content:flex-start}}
@@ -138,7 +144,7 @@ kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;bo
   <div id="badges"></div><div id="float"></div>
   <div id="top"><div id="banner"></div><div id="hint"></div></div>
   <div id="toast"></div>
-  <aside class="roster" id="rosterW"></aside><aside class="roster" id="rosterB"></aside>
+  <aside class="roster" id="rosterW"></aside><aside class="roster" id="rosterB"></aside><aside id="fxref"></aside>
   <section id="dock"><div id="info"></div><div id="acts"></div><div id="pips"></div><div id="cards"></div></section>
   <div id="keys"></div>
   <div id="log"></div>
@@ -867,7 +873,16 @@ const isReady=u=>G.phase==='play'&&u.alive&&u.team===G.turnPlayer&&!u.played&&!(
 function ucHTML(u){return`<div class="uc ${G.sel===u?'sel':''} ${isReady(u)?'ready':''} ${u.played&&u.alive?'played':''} ${u.alive?'':'dead'}" data-id="${u.id}" style="--cc:${CLS[u.d.cls].c}">
   <div class="nm">${u.d.name}${u.effect?` <span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span>`:''}<small>${u.d.sub}</small></div><div class="hp">${hearts(u)}</div>
   <div class="st">ATK ${stat(u,'atk')} DEF ${stat(u,'def')} HAB ${stat(u,'hab')} PRE ${stat(u,'pre')}</div><div class="fx">${u.played&&u.alive?'✔':''}</div></div>`}
-function renderRosters(){[0,1].forEach(t=>{const us=G.units.filter(u=>u.team===t);
+const FXREF=[['toxic','Poison : −1 PV à chaque fin de manche (2 manches), retiré par un soin.'],['stun','Une seule action à son prochain tour.'],['burn','Fin de manche, d6 : 1-3 s\'éteint, 4-6 −1 PV.'],['numb','Ne peut pas se déplacer.'],['disrupt','Ne peut pas utiliser de capacité ni d\'ultime.'],['jam','Ne peut pas jouer de carte renfort.'],['frozen','Passe son tour ou sacrifie 1 PV pour jouer.']];
+function renderFxRef(){const el=$('#fxref');if(!el)return;const on=k=>G.units.filter(u=>u.alive&&u.effect&&u.effect.type===k).length;
+  const rows=FXREF.map(([k,t])=>{const n=on(k);return`<div class="fxr ${n?'on':''}"><i>${EFF[k][0]}</i><span><b>${EFF[k][1]}</b>${n?`<span class="n">×${n}</span>`:''}</span><span>${t}</span></div>`}).join('')
+   +`<div class="fxr"><i>💣</i><span><b>Bombe</b></span><span>Explose à 0 : dégâts à la cible et 1 PV aux adjacents.</span></div><div class="fxr"><i>🌱</i><span><b>Soin continu</b></span><span>+PV à chaque fin de manche.</span></div>`
+   +`<div class="fxr"><i>⛓</i><span><b>Chaîne</b></span><span>+1 par capacité lancée par l'équipe dans la manche, boost les coups de grâce.</span></div>`
+   +`<div class="fxr"><i>▦</i><span><b>Zones</b></span><span>Effet sur qui y entre ou y reste en fin de manche.</span></div>`
+   +`<div class="fxr"><i>ℹ️</i><span><b>Règles</b></span><span>1 effet max par personnage ; ils se dissipent après son prochain tour.</span></div>`;
+  el.innerHTML=`<div class="fxr-h" id="fxh"><span>Effets</span><kbd>I</kbd></div>`+rows;$('#fxh').onclick=()=>el.classList.toggle('min');
+  el.style.display=(G.phase==='menu'||G.phase==='pick')?'none':'block'}
+function renderRosters(){renderFxRef();[0,1].forEach(t=>{const us=G.units.filter(u=>u.team===t);
   $(t?'#rosterB':'#rosterW').innerHTML=`<div class="rh"><b>${TEAMS[t]}</b><span>Renforts : ${G.hand[t].length} · Ult ${G.ult[t]?'✖':'✔'}</span></div>`+us.map(ucHTML).join('')})
   document.querySelectorAll('.uc').forEach(el=>el.onclick=()=>{const u=G.units.find(x=>x.id==el.dataset.id);if(!u)return;G.cur={c:u.c,r:u.r};if(G.phase==='play'&&!G.busy&&G.mode==='idle')confirmAct()})}
 function renderDock(){
@@ -892,7 +907,7 @@ function renderBadges(){const el=$('#badges');let h='';for(const u of G.units){i
   for(const z of G.zones){const ks=[...z.keys].map(k=>k.split(',').map(Number)),cx=ks.reduce((a,b)=>a+b[0],0)/ks.length,cz=ks.reduce((a,b)=>a+b[1],0)/ks.length,[x,y]=screenOf(new THREE.Vector3(cx-3.5,.3,cz-3.5));
     h+=`<div class="zb" style="left:${x}px;top:${y}px;color:#${ZK[z.kind].col.toString(16).padStart(6,'0')}">${ZK[z.kind].ic} ${z.ttl}</div>`}
   if(el._h!==h){el.innerHTML=h;el._h=h}}
-function renderKeys(){const K=[['←↑↓→ / WASD','Curseur'],['Entrée / Espace','Valider'],['Tab','Perso suivant'],['1','Déplacer'],['2','Attaquer'],['3','Capacité'],['4','Ultime (manche 2+)'],['5','Carte renfort'],['6','Soigner (Soutien)'],['E','Fin de tour'],['Échap','Annuler'],['V','Vue plongeante/inclinée'],['[ ]','Tourner la caméra'],['0','Recentrer'],['Clic droit + glisser','Orbiter'],['Molette','Zoom'],['Maj/Molette + glisser','Déplacer'],['+ / −','Zoom'],['H','Masquer l\'aide']];
+function renderKeys(){const K=[['←↑↓→ / WASD','Curseur'],['Entrée / Espace','Valider'],['Tab','Perso suivant'],['1','Déplacer'],['2','Attaquer'],['3','Capacité'],['4','Ultime (manche 2+)'],['5','Carte renfort'],['6','Soigner (Soutien)'],['E','Fin de tour'],['Échap','Annuler'],['V','Vue plongeante/inclinée'],['[ ]','Tourner la caméra'],['0','Recentrer'],['Clic droit + glisser','Orbiter'],['Molette','Zoom'],['Maj/Molette + glisser','Déplacer'],['+ / −','Zoom'],['I','Rappel des effets'],['H','Masquer l\'aide']];
   $('#keys').innerHTML='<div class="kh"><span>Contrôles</span><kbd>H</kbd></div>'+K.map(([k,t])=>`<kbd>${k}</kbd><span>${t}</span>`).join('')}
 
 /* ============ MENU, SÉLECTION & PLACEMENT ============ */
@@ -1057,6 +1072,7 @@ addEventListener('keydown',e=>{
   if(k===']'){CAMT.yaw+=Math.PI/4;return}
   if(k==='0'){Object.assign(CAMT,CAMHOME);CAMT.yaw=Math.round(CAMC.yaw/(2*Math.PI))*2*Math.PI;return}
   if(k==='h'){$('#keys').classList.toggle('min');return}
+  if(k==='i'){$('#fxref').classList.toggle('min');return}
   if(G.phase==='place'&&k==='x'){autoPlace();return}
   if(G.busy)return;
   if(G.phase==='play'&&G.bot&&G.turnPlayer===1&&!MOVE[k])return;
