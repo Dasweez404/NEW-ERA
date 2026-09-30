@@ -18,6 +18,7 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--
 canvas#c{position:absolute;inset:0;width:100%;height:100%;display:block;outline:none}
 #badges,#float{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .badge{position:absolute;transform:translate(-50%,-100%);text-align:center;font-size:11px;font-weight:700;letter-spacing:.04em;white-space:nowrap;text-shadow:0 1px 2px #000}
+.badge .tg{font-size:10px;padding:0 6px;border-radius:99px;margin-bottom:2px;color:#111;font-weight:700;animation:tgin .25s ease-out} .tg.atk{background:#ff6b6b} .tg.abl{background:#c48cff} .tg.ally{background:#3ee08a} @keyframes tgin{from{transform:scale(.4);opacity:0}}
 .badge .hp{font-size:12px;letter-spacing:1px;color:#ff6b6b}
 .badge .hp i{font-style:normal;color:#ffffff40}
 .badge .nm{display:inline-block;padding:0 5px;border-radius:3px;background:#0009;color:#fff}
@@ -33,7 +34,7 @@ canvas#c{position:absolute;inset:0;width:100%;height:100%;display:block;outline:
 #dice{animation:dicein .22s ease-out} @keyframes dicein{from{opacity:0;transform:translate(-50%,-10px) scale(.92)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
 .uc{transition:background .15s,transform .15s,opacity .3s} .uc:hover{transform:translateX(3px)} .uc.sel{transform:translateX(5px)}
 #log div:last-child{animation:login .3s ease-out} @keyframes login{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
-.btn{transition:transform .1s,border-color .15s,background .15s} .btn:active:not(:disabled){transform:scale(.94)} .btn:hover:not(:disabled){transform:translateY(-1px)}
+.cnt{background:#0d101a;border-radius:99px;padding:0 6px;color:var(--amber);font-size:10px} .btn{transition:transform .1s,border-color .15s,background .15s} .btn:active:not(:disabled){transform:scale(.94)} .btn:hover:not(:disabled){transform:translateY(-1px)}
 .pc,.mode,.tab{transition:transform .12s,border-color .15s} .pc:hover,.mode:hover{transform:translateY(-2px)} .pc.cur{transform:translateY(-2px) scale(1.02)}
 .badge{transition:opacity .2s}
 kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px;color:var(--amber);white-space:nowrap}
@@ -295,12 +296,12 @@ const POW={
  20:['Slime',B.eff('Bave collante','numb'),B.aoe('Marée visqueuse','numb',PRE1,1)],
  21:['Électricité',B.eff('Décharge','stun',4),B.aoe('Surtension','stun',3,1)],
  23:['Gravité',B.eff('Gravité accrue','numb'),B.aoe('Singularité','numb',4,1)],
- 25:['Énergie cinétique',B.deb('Absorber l\'élan','atk',-1),B.hit('Impact différé',2,{far:5})],
+ 25:['Carcajou + Énergie cinétique',TRAIT.bite('Carcajou')[0],B.hit('Impact différé',2,{far:5})],
  30:['Temps',B.act('Accélération temporelle',1),B.act('Arrêt du temps',2)],
  32:['Chance',B.ally('Coup de chance','def',2),B.allyAoe('Jour de veine',[['atk',1],['def',1]],99,'round')],
  35:AN('Hippopotame','charge'),
  40:['Invisibilité',B.self('Disparition',[['def',2]]),B.strike('Frappe invisible',5,2)],
- 41:A2('Éléphant','tank','Seiche','spit'),
+ 41:['Seiche + Éléphant d\'Afrique',TRAIT.spit('Seiche')[0],TRAIT.tank('Éléphant')[1]],
  51:['Virus',B.eff('Infection','toxic'),B.aoe('Pandémie','toxic',3)],
  52:['Lames',B.hit('Coup de lame',1),B.aoe('Tourbillon de lames',null,PRE1,1)],
  53:['Période',B.heal('Rajeunissement'),B.aoeDeb('Retour à l\'enfance','atk',-1,4)],
@@ -323,7 +324,7 @@ const POW={
  118:['Effacement',B.eff('Effacer un pouvoir','disrupt'),B.aoe('Page blanche','disrupt',5)],
  119:AN('Lion','bite'),
  120:['Piques',B.self('Hérissement',[['def',2]]),B.aoe('Explosion de piques',null,1,1)],
- 128:['Température froide / Éponge',B.eff('Givre','numb'),B.hit('Restitution des dégâts',2)],
+ 128:['Température froide + Éponge',B.eff('Givre','numb'),B.hit('Restitution des dégâts',2)],
  133:['Sucre',B.self('Sucre rapide',[['hab',2],['atk',1]]),B.self('Overdose de sucre',[['atk',2],['def',1]],1)],
  139:AN('Crocodile du Nil','bite'),
  140:['Sable',B.aoe('Sable dans les yeux','jam',2),B.aoe('Tempête de sable','numb',4,1)],
@@ -354,13 +355,13 @@ const POW={
  218:['Roue',B.dash('Roulade',4),B.strike('Écrasement à roues',5,1)],
  222:['Transmutation',B.heal('Transmutation'),B.healAoe('Alchimie')],
  223:['Forme arme',B.self('Forme d\'arme',[['atk',2]]),B.blitz('Lame vivante')],
- 234:['Air comprimé / Kératine',B.dash('Propulsion',3),B.aoe('Explosion d\'air','stun',PRE1)],
+ 234:['Air comprimé + Kératine',B.dash('Propulsion d\'air',3),B.strike('Griffes de kératine',4,2)],
  235:['Vœu',B.heal('Étoile filante'),B.healAoe('Pluie d\'étoiles')],
  236:AN('Paon','display'),
  245:['Poison',B.eff('Fiole toxique','toxic'),B.aoe('Nuage empoisonné','toxic',PRE1,1)],
  246:['Faufilement',B.dash('Glisser',3,['def',1]),B.strike('Coup de papier',5,2)],
  247:['Blueprint',B.eff('Piège fabriqué','numb'),B.aoe('Champ de mines','stun',3,1)],
- 257:['Nageoire / Vitesse',B.dash('Sprint',4,['atk',1]),B.blitz('Vitesse maximale')],
+ 257:['Nageoire + Vitesse',B.dash('Coup de nageoire',3,['atk',1]),B.blitz('Vitesse maximale')],
  258:['Rebond',B.self('Bond',[['hab',2],['def',1]]),B.aoe('Sol rebondissant','numb',3)],
  274:['Aura',B.allyAoe('Aura',[['atk',1]],3),B.allyAoe('Aura maximale',[['atk',1],['def',1],['hab',1]],99,'round')],
  275:['Champ de force',B.allyAoe('Bulle',[['def',2]],1),B.allyAoe('Dôme',[['def',2]],99)],
@@ -369,7 +370,7 @@ const POW={
  278:['Psychokinésie',B.pull('Lévitation'),B.aoe('Tempête psychique','stun',4)],
  279:['Glace',B.eff('Givre','numb'),B.eff('Prison de glace','frozen')],
  280:['Ondes physiques',B.aoe('Onde de choc','numb',2),B.aoe('Onde dévastatrice','stun',4,1)],
- 281:AN('Lynx','stealth'),
+ 281:['Lynx + Subtilisation',TRAIT.stealth('Lynx')[0],B.steal('Subtilisation')],
  288:['Barrière',B.allyAoe('Barrière',[['def',2]],1),B.healAoe('Mur de soin')],
  290:['Éclosion',B.heal('Éclosion revigorante'),B.healAoe('Nuée de bourgeons')],
  292:['Régénération',B.self('Régénération',[],1),B.self('Renaissance',[['def',1]],2)],
@@ -380,10 +381,10 @@ const POW={
  313:['Astéroïdes',B.hit('Météorite',1),B.aoe('Pluie d\'astéroïdes',null,4,1)],
  314:['Esprit',B.swap('Échange d\'esprit'),B.eff('Possession','frozen')],
  315:['Manipulation mentale',B.eff('Suggestion','jam'),B.eff('Contrôle mental','frozen')],
- 323:A2('Dragon de Komodo','flight','Dragon de Komodo','venom'),
- 324:A2('Tigre','stealth','Tigre','charge'),
- 325:A2('Buffle','charge','Buffle','tank'),
- 326:['Singe capucin / Portail',B.swap('Portails',5),B.dash('Grand portail',6)],
+ 323:['Dragon de Komodo + Ailes',TRAIT.venom('Komodo')[0],TRAIT.flight('Ailes')[1]],
+ 324:['Tigre + Pierre',TRAIT.stealth('Tigre')[0],B.aoe('Éboulement de pierre','stun',PRE1,1)],
+ 325:['Buffle + Durcissement',TRAIT.charge('Buffle')[0],B.self('Corps invincible',[['atk',1],['def',3]])],
+ 326:['Singe capucin + Portail',TRAIT.fast('Capucin')[0],B.dash('Portails communicants',6)],
  334:AN('Requin blanc','bite'),
  335:AN('Scorpion','venom'),
  336:['Fumée',B.aoe('Écran de fumée','jam',2),B.aoe('Nuage suffocant','disrupt',4)],
@@ -478,7 +479,7 @@ const hlMeshes={};
 for(let r=0;r<N;r++)for(let c=0;c<N;c++){
   const m=new THREE.Mesh(new THREE.PlaneGeometry(0.86,0.86),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false}));
   m.rotation.x=-Math.PI/2;m.position.set(c-3.5,(isStruct(c,r)?0.53:0.02),r-3.5);scene.add(m);hlMeshes[KEY(c,r)]=m}
-const HLC={move:[0x4aa3ff,.5],atk:[0xff4d4d,.55],abl:[0xb26bff,.55],ally:[0x3ee08a,.55],place:[0xffd24a,.5]};
+const HLC={rngA:[0xff4d4d,.14],rngB:[0xb26bff,.16],move:[0x4aa3ff,.5],atk:[0xff4d4d,.55],abl:[0xb26bff,.55],ally:[0x3ee08a,.55],place:[0xffd24a,.5]};
 function paintHL(){const pl=.8+.2*Math.sin(performance.now()/220);for(const k in hlMeshes){const t=G.hl.get(k),m=hlMeshes[k].material;if(t){m.color.setHex(HLC[t][0]);m.opacity=HLC[t][1]*pl}else m.opacity=0}}
 // curseur + anneau de sélection
 const frameGeo=new THREE.RingGeometry(0.62,0.72,4,1);frameGeo.rotateZ(Math.PI/4);frameGeo.rotateX(-Math.PI/2);
@@ -498,6 +499,7 @@ function buildUnit(d,team){
   const rim=add(new THREE.TorusGeometry(0.46,0.04,4,8),M(team===0?0xffffff:0x8b5cff),0,0.1,0);rim.rotation.x=Math.PI/2;rim.rotation.z=Math.PI/8;
   add(new THREE.CylinderGeometry(0.34,0.38,0.1,6),M(team===0?0xd9deee:0x2a2c3a),0,0.14,0);
   const rd=new THREE.Mesh(new THREE.RingGeometry(0.56,0.68,24).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0x3ee08a,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}));rd.position.y=0.03;g.add(rd);g.userData.ready=rd;
+  const tg=new THREE.Mesh(new THREE.RingGeometry(0.74,0.9,4,1).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0xff4d4d,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}));tg.position.y=0.05;g.add(tg);g.userData.tgt=tg;
   const ring=add(new THREE.TorusGeometry(0.34,0.035,4,6),M(col),0,0.2,0);ring.rotation.x=Math.PI/2;
   if(d.cls==='A'){const b=add(new THREE.OctahedronGeometry(0.33,0),M(col),0,0.56,0);b.scale.y=1.4;
     add(new THREE.ConeGeometry(0.09,0.34,4),M(light),-0.3,0.78,0).rotation.z=0.55;add(new THREE.ConeGeometry(0.09,0.34,4),M(light),0.3,0.78,0).rotation.z=-0.55;
@@ -688,13 +690,25 @@ async function useCard(i){const u=G.sel,c=G.hand[u.team][i];G.busy=true;commit()
   log(`<b>${u.d.name}</b> joue le renfort <span class="r">${c.n}</span>`);await c.use(u);await sleep(200);G.mode='sel';await after()}
 
 /* ============ SURBRILLANCES ============ */
-function recalc(){G.hl=new Map();G.solo=new Set();
+const TMC={atk:0xff4d4d,hint:0xff4d4d,abl:0xc48cff,ally:0x3ee08a};
+function areaCells(u,f){const out=[];for(let r=0;r<N;r++)for(let c=0;c<N;c++){if(c===u.c&&r===u.r)continue;const cell={c,r};let ok=false;
+  if(f==='atk')ok=rangeState(u,cell)===1;
+  else if(f.t==='enemy')ok=f.far?cheb(u,cell)<=f.far:rangeState(u,cell)===1;
+  else if(f.t==='ally')ok=cheb(u,cell)<=stat(u,'pre')+(isStruct(u.c,u.r)?1:0);
+  else if(f.t==='none'){const rad=typeof f.rad==='function'?f.rad(u):f.rad;ok=rad<99&&cheb(u,cell)<=rad}
+  if(ok)out.push(KEY(c,r))}return out}
+function recalc(){G.hl=new Map();G.solo=new Set();G.tmark=new Map();G.tcount=null;
   if(G.phase==='place'){const team=G.pl%2;SPAWN[team].forEach(([c,r])=>{if(!unitAt(c,r))G.hl.set(KEY(c,r),'place')});paintHL();return}
   const u=G.sel;if(!u||G.phase!=='play'){paintHL();return}
+  const area=(f,t)=>{for(const k of areaCells(u,f))if(!G.hl.has(k))G.hl.set(k,t)};
+  if(G.mode==='sel'&&can('atk')[0])for(const{t} of attackTargets(u))G.tmark.set(t.id,'hint');
   if(G.mode==='move'){for(const[k] of reachable(u))if(k!==KEY(u.c,u.r))G.hl.set(k,'move')}
-  else if(G.mode==='atk'){for(const{t,solo} of attackTargets(u)){G.hl.set(KEY(t.c,t.r),'atk');if(solo)G.solo.add(KEY(t.c,t.r))}}
-  else if(G.mode==='abl'||G.mode==='ult'){const s=G.mode==='abl'?u.d.ab:u.d.ul,ts=targetsFor(u,s);
-    for(const t of ts)G.hl.set(KEY(t.c,t.r),s.t==='ally'?'ally':'abl')}
+  else if(G.mode==='atk'){const ts=attackTargets(u);G.tcount=ts.length;
+    for(const{t,solo} of ts){G.hl.set(KEY(t.c,t.r),'atk');G.tmark.set(t.id,'atk');if(solo)G.solo.add(KEY(t.c,t.r))}area('atk','rngA')}
+  else if(G.mode==='abl'||G.mode==='ult'){const s=G.mode==='abl'?u.d.ab:u.d.ul,ts=targetsFor(u,s);G.tcount=ts.length;
+    const kind=s.t==='ally'||(s.t==='none'&&s.aoe!=='enemies')?'ally':'abl';
+    for(const t of ts){if(s.t==='cell'){G.hl.set(KEY(t.c,t.r),'abl')}else{G.hl.set(KEY(t.c,t.r),kind);G.tmark.set(t.id,kind)}}
+    area(s,'rngB')}
   paintHL()}
 
 /* ============ HUD ============ */
@@ -715,8 +729,9 @@ function renderTop(){
   else if(m==='frozen')t=`${u.d.name} est gelé 🧊 : <kbd>F</kbd> briser la glace (−1 PV) et jouer · <kbd>E</kbd> passer son tour`;
   else if(m==='sel')t=`Actions restantes : ${G.actions} · <kbd>1</kbd> Déplacer <kbd>2</kbd> Attaquer <kbd>3</kbd> Capacité <kbd>4</kbd> Ultime <kbd>5</kbd> Renfort <kbd>E</kbd> Fin`;
   else if(m==='move')t='Choisis une case bleue · <kbd>Entrée</kbd> valider · <kbd>Échap</kbd> annuler';
-  else if(m==='atk')t='Choisis un ennemi rouge · <kbd>Entrée</kbd> attaquer · <kbd>Échap</kbd> annuler';
-  else if(m==='abl'||m==='ult'){const s=m==='abl'?u.d.ab:u.d.ul;t=s.t==='none'?`${s.n} : <kbd>Entrée</kbd> pour lancer (unités concernées en violet/vert)`:`${s.n} : choisis une cible en surbrillance · <kbd>Entrée</kbd>`}
+  else if(m==='atk')t=`<b style="color:#ff6b6b">${G.tcount} ennemi${G.tcount>1?'s':''} attaquable${G.tcount>1?'s':''}</b> (rouge) · zone de portée teintée · <kbd>Entrée</kbd> attaquer · <kbd>Échap</kbd> annuler`;
+  else if(m==='abl'||m==='ult'){const s=m==='abl'?u.d.ab:u.d.ul;const who=s.t==='cell'?'case(s) disponible(s)':s.t==='ally'||(s.t==='none'&&s.aoe!=='enemies')?'allié(s) concerné(s) (vert)':'ennemi(s) concerné(s) (violet)';
+    t=`${s.n} : <b style="color:#c48cff">${G.tcount} ${who}</b> · `+(s.t==='none'?'<kbd>Entrée</kbd> pour lancer':'<kbd>Entrée</kbd> sur une cible')+' · <kbd>Échap</kbd> annuler'}
   else if(m==='card')t='<kbd>↑↓</kbd> choisir · <kbd>Entrée</kbd> jouer · <kbd>Échap</kbd> annuler';
   h.innerHTML=t}
 const isReady=u=>G.phase==='play'&&u.alive&&u.team===G.turnPlayer&&!u.played&&!(G.bot&&u.team===1);
@@ -732,16 +747,18 @@ function renderDock(){
   const u=insp,d=u.d;
   info.innerHTML=`<h3 style="--cc:${CLS[d.cls].c}">${d.name}${u.effect?` <span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span>`:''}<span class="chip">${CLS[d.cls].n} · ${d.sub}</span><span style="color:var(--mut);font-weight:500;font-size:12px">${TEAMS[u.team]} · ${hearts(u)} ${u.effect?EFF[u.effect.type][0]+' '+EFF[u.effect.type][1]:''}</span></h3>
    <div class="stats"><span>ATK <b>${stat(u,'atk')}</b></span><span>DEF <b>${stat(u,'def')}</b></span><span>HAB <b>${stat(u,'hab')}</b></span><span>PRE <b>${stat(u,'pre')}</b></span></div>
-   <div class="abil">${d.power?`<b>Pouvoir · ${d.power}</b><br>`:''}<b>${d.ab.n}</b> — ${d.ab.x}<br><b>Ultime · ${d.ul.n}</b> — ${d.ul.x}${G.variant?`<br><b>${d.sub}</b> — ${SUBTXT[d.sub]}`:''}</div>`;
+   <div class="abil">${d.power?`<b>${d.power.includes(' + ')?'Double pouvoir':'Pouvoir'} · ${d.power}</b><br>`:''}<b>${d.ab.n}</b> — ${d.ab.x}<br><b>Ultime · ${d.ul.n}</b> — ${d.ul.x}${G.variant?`<br><b>${d.sub}</b> — ${SUBTXT[d.sub]}`:''}</div>`;
   if(G.sel!==u||G.phase!=='play'){acts.innerHTML='';pips.innerHTML='';cards.innerHTML='';return}
-  const B=(k,label,cmd,on)=>{const[ok,why]=can(cmd);return`<button class="btn ${on?'on':''}" data-cmd="${cmd}" ${ok?'':'disabled'} title="${why||''}"><kbd>${k}</kbd>${label}${ok?'':` <small style="color:var(--mut)">(${why})</small>`}</button>`};
+  const cnt=cmd=>cmd==='atk'?attackTargets(u).length:cmd==='abl'?targetsFor(u,d.ab).length:cmd==='ult'?targetsFor(u,d.ul).length:0;
+  const B=(k,label,cmd,on)=>{const[ok,why]=can(cmd);const n=ok&&cnt(cmd);return`<button class="btn ${on?'on':''}" data-cmd="${cmd}" ${ok?'':'disabled'} title="${why||''}"><kbd>${k}</kbd>${label}${n?` <small class="cnt">${n} cible${n>1?'s':''}</small>`:''}${ok?'':` <small style="color:var(--mut)">(${why})</small>`}</button>`};
   acts.innerHTML=G.mode==='frozen'?`<button class="btn" data-cmd="thaw"><kbd>F</kbd>Briser (−1 PV)</button><button class="btn" data-cmd="end"><kbd>E</kbd>Passer</button>`:
    B(1,'Déplacer','move',G.mode==='move')+B(2,'Attaquer','atk',G.mode==='atk')+B(3,d.ab.n,'abl',G.mode==='abl')+B(4,'Ult · '+d.ul.n,'ult',G.mode==='ult')+B(5,`Renfort (${G.hand[u.team].length})`,'card',G.mode==='card')+`<button class="btn" data-cmd="end"><kbd>E</kbd>Fin de tour</button>`;
   acts.querySelectorAll('button').forEach(b=>b.onclick=()=>command(b.dataset.cmd));
   pips.innerHTML=`Actions : ${[0,1].map(i=>`<span class="pip ${i<G.actions?'':'off'}"></span>`).join('')}${u.freeAtk>0?` · Blitz : ${u.freeAtk} attaque(s) gratuite(s)`:''}${u.buffs.length?' · Bonus : '+u.buffs.map(b=>`${b.v>0?'+':''}${b.v} ${b.k.toUpperCase()}`).join(', '):''}`;
   const hand=G.hand[u.team];cards.innerHTML=hand.map((c,i)=>`<div class="card ${G.mode==='card'&&i===G.cardIdx?'cur':''}"><b>${c.n}</b><br>${c.x}</div>`).join('')}
 function renderBadges(){const el=$('#badges');let h='';for(const u of G.units){if(!u.alive||!u.mesh.visible)continue;const[x,y]=screenOf(u.mesh.position,1.35);
-  h+=`<div class="badge t${u.team}" style="left:${x}px;top:${y}px"><div class="hp">${hearts(u)}</div><span class="nm">${u.effect?`<span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span> `:''}${u.d.name}</span></div>`}
+  const tm=G.tmark&&G.tmark.get(u.id),tag=tm&&tm!=='hint'?`<div class="tg ${tm}">${tm==='atk'?'⚔ Attaquable':tm==='ally'?'✚ Allié concerné':'✦ Ennemi concerné'}</div>`:'';
+  h+=`<div class="badge t${u.team}" style="left:${x}px;top:${y}px">${tag}<div class="hp">${hearts(u)}</div><span class="nm">${u.effect?`<span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span> `:''}${u.d.name}</span></div>`}
   if(el._h!==h){el.innerHTML=h;el._h=h}}
 function renderKeys(){const K=[['←↑↓→ / WASD','Curseur'],['Entrée / Espace','Valider'],['Tab','Perso suivant'],['1','Déplacer'],['2','Attaquer'],['3','Capacité'],['4','Ultime (manche 2+)'],['5','Carte renfort'],['E','Fin de tour'],['Échap','Annuler'],['V','Vue plongeante/inclinée'],['[ ]','Tourner la caméra'],['0','Recentrer'],['Clic droit + glisser','Orbiter'],['Molette','Zoom'],['Maj/Molette + glisser','Déplacer'],['+ / −','Zoom'],['H','Masquer l\'aide']];
   $('#keys').innerHTML='<div class="kh"><span>Contrôles</span><kbd>H</kbd></div>'+K.map(([k,t])=>`<kbd>${k}</kbd><span>${t}</span>`).join('')}
@@ -773,10 +790,10 @@ function showPick(){const ov=$('#overlay');ov.className='on';const t=G.pickTeam,
    <div class="slots">${ORDER.map(slot).join('')}</div>
    <div class="tabs">${ORDER.map((c,i)=>`<button class="tab ${c===G.ptab?'on':''}" data-c="${c}" style="--cc:${CLS[c].c}"><kbd>${i+1}</kbd> ${CLS[c].n}</button>`).join('')}<span class="grow"></span>
    <button class="btn" id="pRand"><kbd>R</kbd>Au hasard</button><button class="btn" id="pOk" ${mine.length===4?'':'disabled'}><kbd>C</kbd>Valider l'équipe</button></div></div>
-   <div class="pgrid">${list.map((d,i)=>{const o=takenBy(d);return`<div class="pc ${i===G.pidx?'cur':''} ${mine.includes(d)?'mine':''} ${o>=0&&o!==t?'gone':''} ${o<0||o===t?(canPick(d,t)?'':'costly'):''}" data-i="${i}" style="--cc:${CLS[d.cls].c}"><b>${d.name}</b><small>${d.sub} · #${String(d.num).padStart(3,'0')}</small>${st(d)}${o>=0&&o!==t?'<em>Pris</em>':(!canPick(d,t)&&!mine.includes(d)?'<em>Trop cher</em>':'')}</div>`}).join('')}</div>
+   <div class="pgrid">${list.map((d,i)=>{const o=takenBy(d);return`<div class="pc ${i===G.pidx?'cur':''} ${mine.includes(d)?'mine':''} ${o>=0&&o!==t?'gone':''} ${o<0||o===t?(canPick(d,t)?'':'costly'):''}" data-i="${i}" style="--cc:${CLS[d.cls].c}"><b>${d.name}</b><small>${d.sub} · #${String(d.num).padStart(3,'0')}${d.power&&d.power.includes(' + ')?' · <b style="color:var(--amber)">2 pouvoirs</b>':''}</small>${st(d)}${o>=0&&o!==t?'<em>Pris</em>':(!canPick(d,t)&&!mine.includes(d)?'<em>Trop cher</em>':'')}</div>`}).join('')}</div>
    <div class="pinfo" style="--cc:${CLS[cur.cls].c}"><h3>${cur.name} <span class="chip">${CLS[cur.cls].n} · ${cur.sub}</span> <span class="stars">${'★'.repeat(cur.stars)}</span></h3>
    <div class="stats"><span>ATK <b>${cur.atk}</b></span><span>DEF <b>${cur.def}</b></span><span>HAB <b>${cur.hab}</b></span><span>PRE <b>${cur.pre}</b></span></div>
-   <div class="abil">${cur.power?`<b>Pouvoir · ${cur.power}</b><br>`:''}<b>${cur.ab.n}</b> — ${cur.ab.x}<br><b>Ultime · ${cur.ul.n}</b> — ${cur.ul.x}${G.variant?`<br><b>${cur.sub}</b> — ${SUBTXT[cur.sub]}`:''}</div></div>
+   <div class="abil">${cur.power?`<b>${cur.power.includes(' + ')?'Double pouvoir':'Pouvoir'} · ${cur.power}</b><br>`:''}<b>${cur.ab.n}</b> — ${cur.ab.x}<br><b>Ultime · ${cur.ul.n}</b> — ${cur.ul.x}${G.variant?`<br><b>${cur.sub}</b> — ${SUBTXT[cur.sub]}`:''}</div></div>
    <div class="ovbar"><span><kbd>←↑↓→</kbd> naviguer</span><span><kbd>Tab</kbd>/<kbd>1-4</kbd> classe</span><span><kbd>Entrée</kbd> choisir</span><span><kbd>Retour</kbd> retirer</span></div></div>`;
   const g=ov.querySelector('.pgrid');g.scrollTop=prevScroll;const c=g.children[G.pidx];if(c)c.scrollIntoView({block:'nearest'});
   ov.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{G.ptab=b.dataset.c;G.pidx=0;showPick()});
@@ -942,6 +959,8 @@ function frame(now){const raw=Math.min(.05,(now-last)/1000);last=now;const t=now
     if(u.mesh.userData.ring)u.mesh.userData.ring.rotation.z=t*1.5;
     let da=u.faceY-u.mesh.rotation.y;da=Math.atan2(Math.sin(da),Math.cos(da));u.mesh.rotation.y+=da*(1-Math.exp(-raw*14));
     const rdy=G.phase==='play'&&u.team===G.turnPlayer&&!u.played&&!sel&&!(G.bot&&u.team===1);
+    const tm=G.tmark&&G.tmark.get(u.id),tr=u.mesh.userData.tgt;if(tm)tr.material.color.setHex(TMC[tm]);
+    tr.material.opacity+=(((tm?(tm==='hint'?.5:.95)*(.75+.25*Math.sin(t*7)):0))-tr.material.opacity)*(1-Math.exp(-raw*14));tr.rotation.y=t*1.4;tr.scale.setScalar(tm&&tm!=='hint'?1+Math.sin(t*7)*.07:1);
     const rm=u.mesh.userData.ready;rm.material.opacity+=((rdy?.55+.35*Math.sin(t*5):0)-rm.material.opacity)*(1-Math.exp(-raw*12));rm.scale.setScalar(1+(rdy?Math.sin(t*5)*.06:0));
     u.flash*=Math.exp(-raw*9);const dim=u.played?.45:1;
     for(const m of u.mesh.userData.mats){m.color.copy(m.userData.col).multiplyScalar(dim);m.emissive.setScalar(u.flash*.85)}}
