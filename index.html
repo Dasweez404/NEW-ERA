@@ -572,7 +572,7 @@ const REIN=[
 const newDeck=()=>shuffle([...REIN,...REIN].map(c=>({...c})));
 
 /* ============ ÉTAT ============ */
-const G={mobile:false,mInfo:false,fast:false,online:false,myTeam:0,zones:[],chain:[0,0],multi:[],pv:{hl:new Map(),mark:new Map()},budget:14,bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,phase:'menu',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
+const G={defDie:5,mobile:false,mInfo:false,fast:false,online:false,myTeam:0,zones:[],chain:[0,0],multi:[],pv:{hl:new Map(),mark:new Map()},budget:14,bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,phase:'menu',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
   cur:{c:4,r:8},hl:new Map(),solo:new Set(),token:null,hand:[[],[]],deck:[newDeck(),newDeck()],ult:[false,false],
   picks:[[],[]],dstep:0,dsel:0,pl:0,cardIdx:0,nid:1,over:null};
 const inMenus=()=>G.phase==='menu'||G.phase==='pick'||G.phase==='net';
@@ -870,13 +870,15 @@ function targetsFor(u,s){
 
 /* ============ COMBAT ============ */
 const rollSet=n=>{const a=[d6()];for(let i=1;i<n;i++)a.push(d3());return a};
+const rollDef=n=>{const a=[1+Math.floor(rng()*G.defDie)];for(let i=1;i<n;i++)a.push(d3());return a};
+const rollDefV=n=>{const a=[1+Math.floor(Math.random()*G.defDie)];for(let i=1;i<n;i++)a.push(1+Math.floor(Math.random()*3));return a};
 const rollSetV=n=>{const a=[1+Math.floor(Math.random()*6)];for(let i=1;i<n;i++)a.push(1+Math.floor(Math.random()*3));return a};
 const sum=a=>a.reduce((x,y)=>x+y,0);
 function paintDice(att,def,A,D,verdict,fin){
   const row=(u,arr,role)=>`<div class="drow t${u.team}"><span class="who">${role} · ${u.d.name}</span><span>${arr.map((v,i)=>`<i class="die ${i?'d3':''} ${fin?'pop':''}" style="animation-delay:${i*60}ms">${v}</i>`).join('')}</span><b class="sum">${sum(arr)}</b></div>`;
-  $('#dice').innerHTML=row(att,A,'ATK')+row(def,D,'DEF')+(verdict?`<div class="verdict">${verdict}</div>`:'')}
+  $('#dice').innerHTML=row(att,A,'ATK')+row(def,D,'DEF · d'+G.defDie)+(verdict?`<div class="verdict">${verdict}</div>`:'')}
 async function showDice(att,def,A,D,verdict){const el=$('#dice');el.hidden=false;clearTimeout(showDice.h);
-  for(let i=0;i<9;i++){paintDice(att,def,rollSetV(A.length),rollSetV(D.length));await sleep(65)}
+  for(let i=0;i<9;i++){paintDice(att,def,rollSetV(A.length),rollDefV(D.length));await sleep(65)}
   paintDice(att,def,A,D,verdict,true);await sleep(900);showDice.h=setTimeout(()=>el.hidden=true,2200)}
 async function combat(att,def){
   tutoEv('atk');
@@ -886,7 +888,7 @@ async function combat(att,def){
   return res}
 async function combat0(att,def){
   camFocus([att,def],{min:.62});
-  let A=rollSet(stat(att,'atk')),D=rollSet(stat(def,'def'));
+  let A=rollSet(stat(att,'atk')),D=rollDef(stat(def,'def'));
   if(sub(att)==='Brawler'&&att.flags.rerollAtk){att.flags.rerollAtk=false;if(A[0]<=3){const o=A[0];A[0]=d6();log(`Brawler relance son d6 (${o} → ${A[0]})`)}}
   const sa=sum(A),sd=sum(D);
   const verdict=sa>sd?`${def.d.name} perd 1 PV`:sa<sd?'Défense réussie':(sub(att)==='Protector'||sub(def)==='Protector')?'Égalité (Protector)':'Égalité : rien';
@@ -1086,9 +1088,11 @@ function showMenu(){const ov=$('#overlay');ov.className='on';
   const M=[['Tutoriel','Apprends les bases en jouant une partie guidée contre des pions inoffensifs. Recommandé pour commencer.'],['Deux joueurs','Blancs et Noirs jouent chacun leur tour sur le même clavier.'],['Contre le bot','Tu joues les Blancs. Le bot (niveau facile) joue les Noirs : il hésite, se trompe et attaque sans stratégie.'],['En ligne','Crée un salon protégé par mot de passe ou rejoins celui d\'un ami. Chacun joue depuis son écran.']];
   ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> Arena</h1><p>Duel tactique au tour par tour. Chaque camp compose une équipe de 4 personnages, un par classe. Les Blancs ont un socle rond, les Noirs un socle carré.</p>
    <div class="modes">${M.map((m,i)=>`<div class="mode ${G.menuSel===i?'sel':''}" data-m="${i}"><h2><kbd>${i+1}</kbd> ${m[0]}${i===0?' <span class="chip" style="--cc:var(--amber)">conseillé</span>':''}</h2><p>${m[1]}</p></div>`).join('')}</div>
-   <div class="ovbar"><span><kbd>←</kbd> <kbd>→</kbd> choisir</span><span><kbd>Entrée</kbd> continuer</span><button class="btn" id="mVar"><kbd>B</kbd> Variante avancée : <b>${G.variant?'ACTIVE':'désactivée'}</b></button><button class="btn" id="mBud"><kbd>L</kbd> Équilibrage : <b>${BUDGETS.find(b=>b[0]===G.budget)[1]}</b></button><button class="btn" id="mMob"><kbd>M</kbd> ${G.mobile?'🖥 Mode PC':'📱 Mode mobile'}</button></div><p style="margin-top:10px">Chaque personnage vaut de 1 à 5 étoiles. Le total d'étoiles d'une équipe ne peut pas dépasser la limite : les deux camps ont le même budget.</p></div>`;
+   <div class="ovbar"><span><kbd>←</kbd> <kbd>→</kbd> choisir</span><span><kbd>Entrée</kbd> continuer</span><button class="btn" id="mVar"><kbd>B</kbd> Variante avancée : <b>${G.variant?'ACTIVE':'désactivée'}</b></button><button class="btn" id="mBud"><kbd>L</kbd> Équilibrage : <b>${BUDGETS.find(b=>b[0]===G.budget)[1]}</b></button><button class="btn" id="mDef"><kbd>F</kbd> Dé de défense : <b>d${G.defDie}</b></button><button class="btn" id="mMob"><kbd>M</kbd> ${G.mobile?'🖥 Mode PC':'📱 Mode mobile'}</button></div><p style="margin-top:10px">Chaque personnage vaut de 1 à 5 étoiles. Le total d'étoiles d'une équipe ne peut pas dépasser la limite : les deux camps ont le même budget.</p></div>`;
   ov.querySelectorAll('.mode').forEach(el=>el.onclick=()=>{G.menuSel=+el.dataset.m;menuGo()});
-  $('#mVar').onclick=()=>{G.variant=!G.variant;showMenu()};$('#mBud').onclick=()=>{const i=BUDGETS.findIndex(b=>b[0]===G.budget);G.budget=BUDGETS[(i+1)%BUDGETS.length][0];showMenu()};$('#mMob').onclick=()=>setMobile(!G.mobile)}
+  $('#mVar').onclick=()=>{G.variant=!G.variant;showMenu()};$('#mDef').onclick=cycleDef;$('#mBud').onclick=()=>{const i=BUDGETS.findIndex(b=>b[0]===G.budget);G.budget=BUDGETS[(i+1)%BUDGETS.length][0];showMenu()};$('#mMob').onclick=()=>setMobile(!G.mobile)}
+const DEFS=[6,5,4];
+function cycleDef(){G.defDie=DEFS[(DEFS.indexOf(G.defDie)+1)%3];lsSet('ne_def',String(G.defDie));showMenu()}
 function menuGo(){G.lastMode=G.menuSel;if(G.menuSel===0){startTuto();return}if(G.menuSel===3){netHome();return}G.online=false;G.tuto=null;G.bot=G.menuSel===2;startPick()}
 function startPick(){G.phase='pick';G.pickTeam=0;G.ptab='A';G.pidx=0;G.picks=[[],[]];showPick();refresh()}
 const BUDGETS=[[99,'Libre'],[16,'Large · 16 ★'],[14,'Standard · 14 ★'],[12,'Strict · 12 ★']];
@@ -1244,6 +1248,7 @@ addEventListener('keydown',e=>{
     else if(k==='1'||k==='2'||k==='3'||k==='4'){G.menuSel=+k-1;menuGo()}
     else if(k==='enter'||k===' ')menuGo();
     else if(k==='m'){setMobile(!G.mobile)}
+    else if(k==='f'){cycleDef()}
     else if(k==='b'){G.variant=!G.variant;showMenu()}
     else if(k==='l'){const i=BUDGETS.findIndex(b=>b[0]===G.budget);G.budget=BUDGETS[(i+1)%BUDGETS.length][0];showMenu()}
     return}
@@ -1387,7 +1392,7 @@ function netBack(){if(NET.listUnsub){NET.listUnsub();NET.listUnsub=null}$('#over
 async function netCreate(){const name=$('#netRoom').value.trim(),pass=$('#netPass').value;NET.uname=$('#netName').value.trim()||'Joueur';lsSet('ne_name',NET.uname);
   if(!name){toast('Donne un nom au salon');return}
   const salt=Math.random().toString(36).slice(2,10),hash=pass?await sha(salt+':'+pass):'',code=genCode();
-  try{await NET.db.doc('rooms/'+code).set({name,salt,hash,hostId:NET.uid,hostName:NET.uname,guestId:'',guestName:'',status:'lobby',variant:G.variant,budget:G.budget,seed:0,picks:{},created:Date.now(),upd:Date.now()})}catch(e){return netErr(e)}
+  try{await NET.db.doc('rooms/'+code).set({name,salt,hash,hostId:NET.uid,hostName:NET.uname,guestId:'',guestName:'',status:'lobby',variant:G.variant,budget:G.budget,defDie:G.defDie,seed:0,picks:{},created:Date.now(),upd:Date.now()})}catch(e){return netErr(e)}
   NET.code=code;NET.team=0;await enterSalon()}
 async function netJoin(code){const pass=($('#netJoinPass')||{}).value||'';NET.uname=($('#netName')||{}).value.trim()||NET.uname;lsSet('ne_name',NET.uname);
   try{const ref=NET.db.doc('rooms/'+code),snap=await ref.get();if(!snap.exists){toast('Salon introuvable');return}let d=snap.data();
@@ -1418,10 +1423,12 @@ function renderSalon(){if(G.phase!=='net'||NET.view!=='salon')return;const d=NET
    <div class="netgrid"><div class="netbox"><h3>⚪ Blancs</h3><div class="pl">${esc(d.hostName)} <span class="dotp ${hostOn?'on':''}"></span> ${NET.team===0?'<small>(toi)</small>':''}</div></div>
    <div class="netbox"><h3>⚫ Noirs</h3><div class="pl">${d.guestId?esc(d.guestName)+` <span class="dotp ${guestOn?'on':''}"></span> ${NET.team===1?'<small>(toi)</small>':''}`:'<small>En attente d\'un adversaire…</small>'}</div></div>
    <div class="netbox"><h3>Réglages</h3><button class="btn" id="sVar" ${locked?'disabled':''}>Variante avancée : <b>${d.variant?'ACTIVE':'désactivée'}</b></button>
+    <button class="btn" id="sDef" ${locked?'disabled':''}>Dé de défense : <b>d${d.defDie||5}</b></button>
     <button class="btn" id="sBud" ${locked?'disabled':''}>Équilibrage : <b>${(BUDGETS.find(b=>b[0]===d.budget)||BUDGETS[2])[1]}</b></button></div></div>
    <div class="ovbar"><button class="btn on" id="sGo" ${d.guestId?'':'disabled'}>Composer mon équipe</button><button class="btn" id="sQuit">Quitter le salon</button></div></div>`;
   $('#sGo').onclick=netCompose;$('#sQuit').onclick=()=>netLeave(true);
   $('#sVar').onclick=()=>NET.db.doc('rooms/'+NET.code).update({variant:!d.variant,upd:Date.now()}).catch(netErr);
+  $('#sDef').onclick=()=>NET.db.doc('rooms/'+NET.code).update({defDie:DEFS[(DEFS.indexOf(d.defDie||5)+1)%3],upd:Date.now()}).catch(netErr);
   $('#sBud').onclick=()=>{const i=BUDGETS.findIndex(b=>b[0]===d.budget);NET.db.doc('rooms/'+NET.code).update({budget:BUDGETS[(i+1)%BUDGETS.length][0],upd:Date.now()}).catch(netErr)}}
 function netDoc(snap){
   if(!snap.exists){if(!NET.started){toast('Le salon a été fermé');netLeave(true)}return}
@@ -1431,13 +1438,13 @@ function netDoc(snap){
     if(NET.confirmed&&!(mine&&mine.length)){NET.confirmed=false;G.picks[NET.team]=[];toast('Choix en conflit : recompose ton équipe')}
     const mapped=(opp||[]).map(n=>CHARS.find(c=>c.num===n)).filter(Boolean);
     if(G.picks[o].map(c=>c.num).join()!==mapped.map(c=>c.num).join()){G.picks[o]=mapped;G.picks[NET.team]=G.picks[NET.team].filter(c=>!mapped.includes(c))}
-    G.variant=d.variant;G.budget=d.budget;if(NET.confirmed)showWait();else showPick()}
+    G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;if(NET.confirmed)showWait();else showPick()}
   if(d.status==='lobby'&&d.picks&&d.picks.h&&d.picks.g&&NET.team===0&&!NET.startSent){
     if(d.picks.h.length===4&&d.picks.g.length===4){
       if(d.picks.h.some(n=>d.picks.g.includes(n))){NET.db.doc('rooms/'+NET.code).update({picks:{h:null,g:null},upd:Date.now()}).catch(netErr)}
       else{NET.startSent=true;NET.db.doc('rooms/'+NET.code).update({status:'play',seed:1+Math.floor(Math.random()*2147483000),upd:Date.now()}).catch(netErr)}}}
   if(d.status==='play'&&!NET.started&&d.seed)startNetGame()}
-function netCompose(){const d=NET.doc;if(!d||!d.guestId)return;G.online=true;G.myTeam=NET.team;G.variant=d.variant;G.budget=d.budget;G.phase='pick';G.pickTeam=NET.team;G.ptab='A';G.pidx=0;NET.confirmed=false;
+function netCompose(){const d=NET.doc;if(!d||!d.guestId)return;G.online=true;G.myTeam=NET.team;G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;G.phase='pick';G.pickTeam=NET.team;G.ptab='A';G.pidx=0;NET.confirmed=false;
   G.picks=[[],[]];const o=1-NET.team,opp=NET.team===0?d.picks&&d.picks.g:d.picks&&d.picks.h;G.picks[o]=(opp||[]).map(n=>CHARS.find(c=>c.num===n)).filter(Boolean);showPick();refresh()}
 function showWait(){const ov=$('#overlay');ov.className='on';ov.innerHTML=`<div class="ov"><h1>Équipe <span>validée</span></h1><p>En attente de l'adversaire… La partie démarre dès que les deux équipes sont prêtes.</p><div class="ovbar"><button class="btn" id="wEdit">Modifier mon équipe</button><button class="btn" id="wQuit">Quitter le salon</button></div></div>`;
   $('#wEdit').onclick=async()=>{NET.confirmed=false;try{await NET.db.doc('rooms/'+NET.code).update({picks:{[NET.team===0?'h':'g']:null},upd:Date.now()})}catch(e){netErr(e)}showPick()};$('#wQuit').onclick=()=>netLeave(true)}
@@ -1446,7 +1453,7 @@ async function netConfirmPicks(){const t=NET.team,nums=G.picks[t].map(d=>d.num);
     if(opp&&opp.some(n=>nums.includes(n))){toast('Un de tes personnages vient d\'être pris');G.picks[t]=G.picks[t].filter(c=>!opp.includes(c.num));G.picks[1-t]=opp.map(n=>CHARS.find(c=>c.num===n));showPick();return}
     NET.confirmed=true;await NET.db.doc('rooms/'+NET.code).update({picks:{[t===0?'h':'g']:nums},upd:Date.now()});showWait()}catch(e){NET.confirmed=false;netErr(e)}}
 async function startNetGame(){if(NET.started)return;NET.started=true;const d=NET.doc;
-  seedRng(d.seed);G.variant=d.variant;G.budget=d.budget;resetGame();G.nid=1;G.online=true;G.bot=false;G.myTeam=NET.team;
+  seedRng(d.seed);G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;resetGame();G.nid=1;G.online=true;G.bot=false;G.myTeam=NET.team;
   G.picks=[d.picks.h.map(n=>CHARS.find(c=>c.num===n)),d.picks.g.map(n=>CHARS.find(c=>c.num===n))];
   $('#overlay').className='';CAMHOME.yaw=NET.team?Math.PI:0;Object.assign(CAMT,CAMHOME);Object.assign(CAMC,CAMHOME);
   NET.seq=0;NET.queue=[];NET.catchup=true;NET.firstMoves=false;G.fast=true;startPlacement();
@@ -1469,7 +1476,7 @@ const TUTO=[
  {info:1,t:'<b>La caméra.</b> Clic droit + glisser pour tourner, molette pour zoomer, <kbd>[</kbd> <kbd>]</kbd> pour pivoter, <kbd>V</kbd> pour l\'inclinaison, <kbd>0</kbd> pour recentrer. Essaie, puis continue.'},
  {t:'<b>Choisir un pion.</b> Un anneau vert marque ceux qui peuvent jouer. Déplace le curseur (<kbd>←↑↓→</kbd> ou WASD, ou la souris) sur <b>Zeus</b>, puis <kbd>Entrée</kbd>.',ok:f=>f.sel[1],focus:()=>unitByNum(1)},
  {t:'<b>Se déplacer.</b> Touche <kbd>1</kbd> : les cases bleues sont atteignables (HAB 3). Va sur la case entourée (à 2 cases d\'un ennemi, et à 3 cases d\'Apollo) puis valide. Un pion a <b>2 actions</b> par tour.',ok:f=>f.move,focus:()=>({c:4,r:4})},
- {t:'<b>Attaquer.</b> Touche <kbd>2</kbd> : les ennemis en rouge sont à portée (PRE 2). Tu lances 1 d6 + des d3 (ATK) contre la défense adverse ; si tu fais plus, il perd 1 PV. Aucun ennemi en rouge ? Rapproche-toi d\'abord.',ok:f=>f.atk,focus:()=>unitByNum(25)},
+ {t:'<b>Attaquer.</b> Touche <kbd>2</kbd> : les ennemis en rouge sont à portée (PRE 2). Tu lances 1 d6 + des d3 (ATK) contre la défense adverse (1 d5 + des d3) ; si tu fais plus, il perd 1 PV. Aucun ennemi en rouge ? Rapproche-toi d\'abord.',ok:f=>f.atk,focus:()=>unitByNum(25)},
  {info:1,t:'Le tour se termine <b>automatiquement</b> quand il n\'y a plus d\'action possible (ou avec <kbd>E</kbd>). Les tours alternent ensuite entre les camps : chaque pion joue une fois par <b>manche</b>.'},
  {t:'<b>Soigner.</b> Zeus est blessé ! Sélectionne <b>Apollo</b> (Soutien), touche <kbd>6</kbd> et choisis Zeus (en vert) : +1 PV.',enter:()=>{const z=unitByNum(1);if(z&&z.alive)z.hp=Math.min(z.hp,2);refresh()},ok:f=>f.heal,focus:()=>unitByNum(8)},
  {t:'<b>Capacité spéciale.</b> Apollo a une 2ᵉ action : touche <kbd>3</kbd> pour sa capacité (soigner jusqu\'à 2 alliés). Chaque personnage a une capacité et un ultime, décrits dans le bandeau du bas.',ok:f=>f.abl},
@@ -1478,7 +1485,7 @@ const TUTO=[
  {t:'<b>Renforts.</b> Le jeton doré donne une carte renfort à celui qui l\'atteint. Termine le tour de Zeus (<kbd>E</kbd>), puis déplace Apollo sur la case dorée (<kbd>5</kbd> jouera ensuite une carte).',ok:f=>f.token,focus:()=>({c:3,r:9})},
  {t:'<b>À toi de finir !</b> Élimine les deux pions noirs. Lignes, zones, bombes, combos… tout est détaillé dans les fiches. Bonne chance !',ok:()=>G.phase==='over'}
 ];
-function startTuto(){G.online=false;G.fast=false;resetGame();seedRng(4242);G.bot=true;G.variant=true;G.budget=99;G.tuto={i:0,f:{sel:{}},done:false};
+function startTuto(){G.online=false;G.fast=false;resetGame();seedRng(4242);G.bot=true;G.variant=true;G.budget=99;G.defDie=5;G.tuto={i:0,f:{sel:{}},done:false};
   G.phase='play';$('#overlay').className='';CAMHOME.yaw=0;Object.assign(CAMT,CAMHOME);$('#keys').classList.add('min');
   const sp=(n,t,c,r)=>dropIn(spawnUnit(CHARS.find(x=>x.num===n),t,c,r));
   sp(1,0,4,7);sp(8,0,3,7);sp(25,1,4,2);sp(15,1,7,1);
@@ -1593,6 +1600,7 @@ function frame(now){const raw=Math.min(.05,(now-last)/1000);last=now;const t=now
   if(G.phase==='play'&&G.bot&&G.turnPlayer===1&&G.mode==='idle'&&!G.busy&&!G.botRun)botTurn();
   paintHL();renderer.render(scene,cam);renderBadges();requestAnimationFrame(frame)}
 
+{const v=parseInt(lsGet('ne_def'));if(DEFS.includes(v))G.defDie=v}
 initMobile();$('#mtoggle').onclick=()=>setMobile(!G.mobile);renderKeys();startMenu();requestAnimationFrame(frame);
 </script>
 
