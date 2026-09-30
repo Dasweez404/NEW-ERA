@@ -1,0 +1,577 @@
+<title>New Era Arena</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: plein écran, plateau 3D au centre, rosters sur les côtés, dock d'actions en bas. Jeu sombre volontairement mono-thème. */
+:root{
+  color-scheme:dark;
+  --bg:#12151f; --panel:#1a1f2d; --panel2:#222839; --line:#323a52; --txt:#e8ebf4; --mut:#8e97b1;
+  --amber:#ffb42e; --white:#f1f3f9; --black:#2b2e3b;
+  --A:#ee5b4b; --D:#4a8cf0; --T:#3fc48a; --S:#efbf45;
+  --font:'Chakra Petch',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--txt);font-family:var(--font);font-size:14px}
+#app{position:absolute;inset:0;user-select:none}
+canvas#c{position:absolute;inset:0;width:100%;height:100%;display:block;outline:none}
+#badges,#float{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.badge{position:absolute;transform:translate(-50%,-100%);text-align:center;font-size:11px;font-weight:700;letter-spacing:.04em;white-space:nowrap;text-shadow:0 1px 2px #000}
+.badge .hp{font-size:12px;letter-spacing:1px;color:#ff6b6b}
+.badge .hp i{font-style:normal;color:#ffffff40}
+.badge .nm{display:inline-block;padding:0 5px;border-radius:3px;background:#0009;color:#fff}
+.badge.t0 .nm{border-bottom:2px solid var(--white)} .badge.t1 .nm{border-bottom:2px solid #777c93}
+.badge .fx{font-size:13px}
+.flt{position:absolute;transform:translate(-50%,-50%);font-weight:700;font-size:20px;text-shadow:0 2px 4px #000;animation:flt 1.3s ease-out forwards;white-space:nowrap}
+@keyframes flt{from{opacity:1;margin-top:0}to{opacity:0;margin-top:-56px}}
+kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px;color:var(--amber);white-space:nowrap}
+
+#top{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;max-width:calc(100% - 32px);pointer-events:none}
+#banner{display:flex;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 16px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:13px}
+#banner .dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--line)}
+#banner .dot.t0{background:var(--white)} #banner .dot.t1{background:var(--black);border-color:#8a90aa}
+#hint{background:#0c0f18cc;border-radius:6px;padding:5px 12px;color:var(--txt);text-align:center;font-size:13px}
+#toast{position:absolute;top:96px;left:50%;transform:translateX(-50%);background:var(--amber);color:#1b1300;font-weight:700;padding:5px 14px;border-radius:6px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%}
+#toast.on{opacity:1}
+
+.roster{position:absolute;top:10px;width:212px;display:flex;flex-direction:column;gap:6px;max-height:calc(100% - 300px);overflow:auto}
+#rosterW{left:10px} #rosterB{right:10px}
+.rh{font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px;display:flex;justify-content:space-between;align-items:center;padding:2px 4px;color:var(--mut)}
+.rh b{color:var(--txt)}
+.uc{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--cc);border-radius:6px;padding:5px 8px;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:0 6px}
+.uc:hover{background:var(--panel2)}
+.uc.sel{outline:2px solid var(--amber)} .uc.played{opacity:.5} .uc.dead{opacity:.28;filter:grayscale(1)}
+.uc .nm{font-weight:700} .uc .nm small{color:var(--mut);font-weight:500;margin-left:4px}
+.uc .hp{color:#ff6b6b;letter-spacing:1px;text-align:right} .uc .hp i{font-style:normal;color:#ffffff35}
+.uc .st{font-family:var(--mono);font-size:11px;color:var(--mut)} .uc .fx{text-align:right;font-size:12px}
+.hand{font-size:12px;color:var(--mut);padding:2px 4px}
+.hand b{color:var(--amber)}
+
+#dock{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);width:min(880px,calc(100% - 20px));background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px}
+#info{min-width:0} #info h3{margin:0 0 4px;font-size:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{font-size:11px;font-weight:600;padding:1px 8px;border-radius:99px;background:var(--cc);color:#101010}
+.stats{display:flex;gap:10px;font-family:var(--mono);font-size:12px;margin-bottom:4px;flex-wrap:wrap}
+.stats span b{color:var(--amber)}
+.abil{font-size:12px;color:var(--mut);line-height:1.35} .abil b{color:var(--txt)}
+#acts{display:flex;flex-wrap:wrap;gap:6px;align-content:center;justify-content:flex-end;max-width:420px}
+.btn{font:inherit;font-size:12px;font-weight:600;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer;display:flex;gap:6px;align-items:center}
+.btn:hover:not(:disabled){border-color:var(--amber)} .btn:disabled{opacity:.38;cursor:not-allowed} .btn.on{border-color:var(--amber);background:#3a2f14}
+#pips{grid-column:1/-1;font-size:12px;color:var(--mut);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#pips .pip{width:10px;height:10px;border-radius:50%;background:var(--amber)} #pips .pip.off{background:#3a4058}
+#cards{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap}
+.card{background:#2a2110;border:1px solid var(--amber);border-radius:6px;padding:5px 9px;font-size:12px;max-width:200px}
+.card.cur{outline:2px solid #fff} .card b{color:var(--amber)}
+
+#keys{position:absolute;left:10px;bottom:10px;background:#0c0f18d9;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;display:grid;gap:4px 8px;grid-template-columns:auto 1fr;align-items:center;max-width:250px}
+#keys.min > *:not(.kh){display:none}
+#keys .kh{grid-column:1/-1;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);display:flex;justify-content:space-between}
+#log{position:absolute;right:10px;bottom:10px;width:250px;max-height:190px;overflow:hidden;background:#0c0f18d9;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px}
+#log div{opacity:.9} #log div:last-child{opacity:1;color:#fff} #log .r{color:var(--amber);font-weight:700}
+
+#dice{position:absolute;top:120px;left:50%;transform:translateX(-50%);background:#0c0f18f0;border:1px solid var(--amber);border-radius:10px;padding:10px 16px;min-width:300px}
+.drow{display:flex;align-items:center;gap:10px;padding:3px 0}
+.drow .who{flex:1;font-weight:600;font-size:13px} .drow.t0 .who{color:var(--white)} .drow.t1 .who{color:#a9aec6}
+.die{font-style:normal;font-family:var(--mono);font-weight:700;width:28px;height:28px;display:inline-grid;place-items:center;border-radius:6px;background:#eef0f7;color:#12151f;margin-left:4px}
+.die.d3{background:#b7bfd8;width:24px;height:24px;font-size:12px}
+.drow .sum{font-family:var(--mono);font-size:20px;min-width:34px;text-align:right}
+.verdict{text-align:center;font-weight:700;margin-top:4px;color:var(--amber)}
+
+#overlay{position:absolute;inset:0;background:#0a0c14ec;overflow:auto;padding:18px 16px;display:none}
+#overlay.on{display:block}
+.ov{max-width:1180px;margin:0 auto}
+.ov h1{margin:0;font-size:30px;letter-spacing:.1em;text-transform:uppercase}
+.ov h1 span{color:var(--amber)}
+.ov p{color:var(--mut);margin:4px 0 12px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.dcol{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px;display:grid;gap:8px;align-content:start}
+.dcol.cur{border-color:var(--amber)}
+.dcol h4{margin:0;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--cc)}
+.dc{background:var(--panel2);border:2px solid transparent;border-top:4px solid var(--cc);border-radius:8px;padding:8px 10px;cursor:pointer;font-size:12px;line-height:1.35}
+.dc.sel{border-color:var(--amber);border-top-color:var(--cc)} .dc.t0{opacity:.55;box-shadow:inset 0 0 0 2px var(--white)} .dc.t1{opacity:.55;box-shadow:inset 0 0 0 2px #6b708a}
+.dc h5{margin:0 0 3px;font-size:16px;display:flex;justify-content:space-between;align-items:baseline} .dc h5 small{color:var(--mut);font-weight:500;font-size:11px}
+.dc .who{font-size:11px;font-weight:700;color:var(--amber)}
+.dc p{margin:3px 0 0;color:var(--mut)} .dc p b{color:var(--txt)}
+.ovbar{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:14px;color:var(--mut);font-size:13px}
+.big{font-size:44px;font-weight:700;margin:60px 0 10px;text-align:center}
+@media (min-width:1101px){#dock{width:min(820px,calc(100% - 540px))}}
+@media (max-width:1100px){.roster{display:none}#keys{display:none}}
+@media (max-width:700px){#log{display:none}#dock{grid-template-columns:1fr}#acts{justify-content:flex-start}}
+</style>
+
+<div id="app">
+  <canvas id="c" tabindex="0"></canvas>
+  <div id="badges"></div><div id="float"></div>
+  <div id="top"><div id="banner"></div><div id="hint"></div></div>
+  <div id="toast"></div>
+  <aside class="roster" id="rosterW"></aside><aside class="roster" id="rosterB"></aside>
+  <section id="dock"><div id="info"></div><div id="acts"></div><div id="pips"></div><div id="cards"></div></section>
+  <div id="keys"></div>
+  <div id="log"></div>
+  <div id="dice" hidden></div>
+  <div id="overlay"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+/* ============ DONNÉES ============ */
+const $=s=>document.querySelector(s);
+const N=8, TEAMS=['Blancs','Noirs'], KEY=(c,r)=>c+','+r, DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
+const STRUCT=new Set(['1,3','2,3','5,4','6,4','2,5','2,6','5,2','5,1']);
+const SPAWN=[[[1,6],[3,7],[4,7],[6,6]],[[1,1],[3,0],[4,0],[6,1]]];
+const CENTER=[[3,3],[4,3],[3,4],[4,4]];
+const CLS={A:{n:'Attaque',c:'#ee5b4b',h:0xee5b4b},D:{n:'Défense',c:'#4a8cf0',h:0x4a8cf0},T:{n:'Technique',c:'#3fc48a',h:0x3fc48a},S:{n:'Soutien',c:'#efbf45',h:0xefbf45}};
+const ORDER=['A','D','T','S'];
+const EFF={burn:['🔥','Brûlé'],toxic:['☣️','Toxique'],stun:['💫','Assommé'],numb:['🩹','Engourdi'],disrupt:['🌌','Bouleversement'],jam:['📡','Brouillage'],frozen:['🧊','Gelé']};
+const isStruct=(c,r)=>STRUCT.has(KEY(c,r));
+const d6=()=>1+Math.floor(Math.random()*6), d3=()=>1+Math.floor(Math.random()*3);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const cheb=(a,b)=>Math.max(Math.abs(a.c-b.c),Math.abs(a.r-b.r));
+const cellName=(c,r)=>String.fromCharCode(65+c)+(r+1);
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+
+/* 8 personnages : 2 par classe, un par sous-classe de la variante */
+const CHARS=[
+ {id:'kaelen',name:'Kaelen',cls:'A',sub:'Brawler',atk:4,def:1,hab:2,pre:2,
+  ab:{n:'Souffle ardent',t:'enemy',x:'Cible à portée, d6 : 4-6 Brûlé, 6 = −1 PV en plus.',
+      run:async(u,t)=>{const r=d6();pop(t,'d6 : '+r,'#ffb42e');log(`${u.d.name} lance un d6 : <span class="r">${r}</span>`);if(r>=4)await addEff(t,'burn',u);if(r===6)await dmg(t,1,u)}},
+  ul:{n:'Inferno',t:'none',aoe:'enemies',rad:u=>stat(u,'pre')+1,x:'Tous les ennemis à PRE+1 : Brûlés et −1 PV.',
+      run:async(u,list)=>{for(const t of list){await addEff(t,'burn',u);await dmg(t,1,u)}}}},
+ {id:'nyx',name:'Nyx',cls:'A',sub:'Performer',atk:3,def:2,hab:4,pre:1,
+  ab:{n:'Ruée',t:'cell',cell:3,x:'Se téléporte à ≤3 cases. d6 : 4-6 = +1 ATK ce tour.',
+      run:async(u,cell)=>{await teleport(u,cell);let r=d6();if(G.variant&&u.flags.rerollAb){u.flags.rerollAb=false;r=Math.max(r,d6());log('Performer : relance conservée')}
+        log(`${u.d.name} lance un d6 : <span class="r">${r}</span>`);if(r>=4){addBuff(u,'atk',1,'self',u);pop(u,'+1 ATK','#ff9a5a')}}},
+  ul:{n:'Blitz',t:'none',aoe:'self',rad:0,x:'Cette attaque et la suivante ne coûtent aucune action (2 attaques gratuites).',
+      run:async(u)=>{u.freeAtk=2;pop(u,'BLITZ','#ff9a5a')}}},
+ {id:'bastion',name:'Bastion',cls:'D',sub:'Protector',atk:1,def:4,hab:2,pre:2,
+  ab:{n:'Rempart',t:'none',aoe:'allies',rad:2,x:'Alliés à ≤2 cases (lui compris) : +1 DEF jusqu\'à son prochain tour.',
+      run:async(u,list)=>{for(const a of list){addBuff(a,'def',1,'turn',u);pop(a,'+1 DEF','#6aa8ff')}}},
+  ul:{n:'Forteresse',t:'none',aoe:'allies',rad:99,x:'Tous les alliés : +2 DEF jusqu\'à son prochain tour. Il se soigne de 1 PV.',
+      run:async(u,list)=>{for(const a of list){addBuff(a,'def',2,'turn',u);pop(a,'+2 DEF','#6aa8ff')}heal(u,1)}}},
+ {id:'golem',name:'Golem',cls:'D',sub:'Juggernaut',atk:2,def:4,hab:1,pre:1,
+  ab:{n:'Séisme',t:'none',aoe:'enemies',rad:u=>stat(u,'pre')+1,x:'Ennemis à PRE+1 : Engourdis (pas de déplacement).',
+      run:async(u,list)=>{for(const t of list)await addEff(t,'numb',u)}},
+  ul:{n:'Écrasement',t:'none',aoe:'enemies',rad:u=>stat(u,'pre')+1,x:'Ennemis à PRE+1 : Assommés et −1 PV.',
+      run:async(u,list)=>{for(const t of list){await addEff(t,'stun',u);await dmg(t,1,u)}}}},
+ {id:'sable',name:'Sable',cls:'T',sub:'Ranger',atk:2,def:1,hab:2,pre:4,
+  ab:{n:'Marque',t:'enemy',x:'Cible à portée : −1 DEF jusqu\'au prochain tour de Sable.',
+      run:async(u,t)=>{addBuff(t,'def',-1,'turn',u);pop(t,'−1 DEF','#5fe0a5')}},
+  ul:{n:'Tir fatal',t:'enemy',far:6,x:'Cible à ≤6 cases (sans obstacle) : −2 PV, sans jet.',
+      run:async(u,t)=>{await dmg(t,2,u)}}},
+ {id:'wisp',name:'Wisp',cls:'T',sub:'Flanker',atk:2,def:2,hab:3,pre:2,
+  ab:{n:'Clignotement',t:'cell',cell:4,x:'Se téléporte sur une case libre à ≤4 cases.',
+      run:async(u,cell)=>{await teleport(u,cell)}},
+  ul:{n:'Frappe venimeuse',t:'enemy',far:5,adj:true,x:'Se téléporte au contact d\'un ennemi à ≤5 cases, +1 ATK, combat. Si touché : Toxique.',
+      run:async(u,t)=>{const c=freeAdj(t)[0];await teleport(u,c);addBuff(u,'atk',1,'self',u);const res=await combat(u,t);if(res==='hit')await addEff(t,'toxic',u)}}},
+ {id:'halo',name:'Halo',cls:'S',sub:'Assist',atk:1,def:2,hab:3,pre:3,
+  ab:{n:'Soin',t:'ally',x:'Allié à portée (ou soi) : +1 PV et retire son effet.',
+      run:async(u,t)=>{heal(t,1);cleanse(t)}},
+  ul:{n:'Sanctuaire',t:'none',aoe:'allies',rad:99,x:'Tous les alliés : +1 PV et effets retirés.',
+      run:async(u,list)=>{for(const a of list){heal(a,1);cleanse(a)}}}},
+ {id:'cog',name:'Cog',cls:'S',sub:'Engineer',atk:2,def:2,hab:2,pre:3,
+  ab:{n:'Brouilleur',t:'enemy',x:'Cible à portée, d6 : 1-3 Brouillage (pas de renfort), 4-6 Bouleversement (pas de capacité).',
+      run:async(u,t)=>{const r=d6();pop(t,'d6 : '+r,'#ffb42e');log(`${u.d.name} lance un d6 : <span class="r">${r}</span>`);await addEff(t,r<=3?'jam':'disrupt',u)}},
+  ul:{n:'Cryo-pulse',t:'enemy',x:'Cible à portée : Gelé (passe son tour ou sacrifie 1 PV).',
+      run:async(u,t)=>{await addEff(t,'frozen',u)}}}
+];
+const SUBTXT={Brawler:'Attaque gagnée : relance son d6 au prochain combat.',Performer:'Défense gagnée : relance le d6 de sa prochaine capacité.',Protector:'Égalité au combat : inflige 1 PV.',Juggernaut:'Le 1er PV ne peut être perdu que par un combat.',Ranger:'Ignore les structures pour attaquer.',Flanker:'Ignore les structures pour se déplacer.',Assist:'Attaque gagnée : d3, 2-3 = soigne un allié de 1 PV.',Engineer:'Défense gagnée : d3, 2-3 = se soigne de 1 PV.'};
+
+/* Cartes renfort (extra, 1 par tour de personnage) */
+const REIN=[
+ {id:'med',n:'Trousse de soin',x:'+1 PV et retire l\'effet.',use:u=>{heal(u,1);cleanse(u)}},
+ {id:'adr',n:'Adrénaline',x:'+2 HAB ce tour.',use:u=>{addBuff(u,'hab',2,'self',u);pop(u,'+2 HAB','#7dd3ff')}},
+ {id:'ovc',n:'Surcharge',x:'+1 ATK ce tour.',use:u=>{addBuff(u,'atk',1,'self',u);pop(u,'+1 ATK','#ff9a5a')}},
+ {id:'aeg',n:'Égide',x:'+1 DEF jusqu\'à son prochain tour.',use:u=>{addBuff(u,'def',1,'turn',u);pop(u,'+1 DEF','#6aa8ff')}},
+ {id:'emp',n:'Impulsion EMP',x:'Ennemis à ≤3 cases : Brouillage.',use:async u=>{for(const t of alive(1-u.team))if(cheb(u,t)<=3)await addEff(t,'jam',u)}}
+];
+const newDeck=()=>shuffle([...REIN,...REIN].map(c=>({...c})));
+
+/* ============ ÉTAT ============ */
+const G={phase:'draft',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
+  cur:{c:3,r:6},hl:new Map(),solo:new Set(),token:null,hand:[[],[]],deck:[newDeck(),newDeck()],ult:[false,false],
+  picks:[[],[]],dstep:0,dsel:0,pl:0,cardIdx:0,nid:1,over:null};
+const alive=t=>G.units.filter(u=>u.alive&&u.team===t);
+const unitAt=(c,r)=>G.units.find(u=>u.alive&&u.c===c&&u.r===r);
+function stat(u,k){let v=u.d[k];for(const b of u.buffs)if(b.k===k)v+=b.v;return Math.max(1,v)}
+const sub=u=>G.variant&&u.d.sub;
+
+/* ============ THREE.JS ============ */
+const canvas=$('#c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x12151f);
+const cam=new THREE.OrthographicCamera(-1,1,1,-1,0.1,80);
+const CAMPOS=[new THREE.Vector3(0,17,8),new THREE.Vector3(0,20,0.01)];
+let camMode=0,zoomMul=1;const camNow=CAMPOS[0].clone();
+function resize(){const w=innerWidth,h=innerHeight,a=w/h;renderer.setSize(w,h,false);
+  const hh=Math.max(6.5,6.0/a)*zoomMul;cam.left=-hh*a;cam.right=hh*a;cam.top=hh;cam.bottom=-hh;cam.updateProjectionMatrix()}
+addEventListener('resize',resize);
+
+scene.add(new THREE.HemisphereLight(0xdfe8ff,0x2b3048,0.9));
+const sun=new THREE.DirectionalLight(0xfff0d8,0.85);sun.position.set(-6,13,6);sun.castShadow=true;
+Object.assign(sun.shadow.camera,{left:-7,right:7,top:7,bottom:-7,near:1,far:40});sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+
+const mat=(col,o={})=>new THREE.MeshPhongMaterial(Object.assign({color:col,flatShading:true,shininess:6,specular:0x1a1a1a},o));
+const cellPos=(c,r,y=0)=>new THREE.Vector3(c-3.5,(isStruct(c,r)?0.5:0)+y,r-3.5);
+const boardG=new THREE.Group();scene.add(boardG);
+const tiles=[];
+(function buildBoard(){
+  const slab=new THREE.Mesh(new THREE.BoxGeometry(8.7,0.4,8.7),mat(0x1d2131));slab.position.y=-0.4;slab.receiveShadow=true;boardG.add(slab);
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    const ctr=CENTER.some(([a,b])=>a===c&&b===r), even=(c+r)%2===0;
+    const t=new THREE.Mesh(new THREE.BoxGeometry(0.96,0.2,0.96),mat(ctr?(even?0x3f4763:0x394059):(even?0x2c3246:0x262b3d)));
+    t.position.set(c-3.5,-0.1,r-3.5);t.receiveShadow=true;t.userData={c,r};boardG.add(t);tiles.push(t);
+    if(isStruct(c,r)){
+      const s=new THREE.Mesh(new THREE.BoxGeometry(0.96,0.5,0.96),mat(0x424a66));s.position.set(c-3.5,0.25,r-3.5);s.castShadow=s.receiveShadow=true;s.userData={c,r};boardG.add(s);tiles.push(s);
+      const cap=new THREE.Mesh(new THREE.BoxGeometry(0.74,0.06,0.74),mat(0x59628a));cap.position.set(c-3.5,0.5,r-3.5);cap.receiveShadow=true;boardG.add(cap);
+    }
+  }
+  // repères de camp
+  for(const [team,col] of [[0,0xf1f3f9],[1,0x505570]]){SPAWN[team].forEach(([c,r])=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,0.02,6),mat(col));m.position.set(c-3.5,0.01,r-3.5);boardG.add(m)})}
+})();
+// surbrillances de cases
+const hlMeshes={};
+for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(0.86,0.86),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false}));
+  m.rotation.x=-Math.PI/2;m.position.set(c-3.5,(isStruct(c,r)?0.53:0.02),r-3.5);scene.add(m);hlMeshes[KEY(c,r)]=m}
+const HLC={move:[0x4aa3ff,.5],atk:[0xff4d4d,.55],abl:[0xb26bff,.55],ally:[0x3ee08a,.55],place:[0xffd24a,.5]};
+function paintHL(){for(const k in hlMeshes){const t=G.hl.get(k),m=hlMeshes[k].material;if(t){m.color.setHex(HLC[t][0]);m.opacity=HLC[t][1]}else m.opacity=0}}
+// curseur + anneau de sélection
+const frameGeo=new THREE.RingGeometry(0.62,0.72,4,1);frameGeo.rotateZ(Math.PI/4);frameGeo.rotateX(-Math.PI/2);
+const cursor=new THREE.Mesh(frameGeo,new THREE.MeshBasicMaterial({color:0xffb42e,side:THREE.DoubleSide,depthTest:false}));cursor.renderOrder=5;scene.add(cursor);
+const selRing=new THREE.Mesh(new THREE.RingGeometry(0.4,0.5,24).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide,transparent:true,opacity:.9}));selRing.visible=false;scene.add(selRing);
+// jeton renfort
+const tokenM=new THREE.Group();const tk=new THREE.Mesh(new THREE.OctahedronGeometry(0.22,0),mat(0xffc93c,{emissive:0x664400}));tk.position.y=0.55;tk.castShadow=true;tokenM.add(tk);
+const tkr=new THREE.Mesh(new THREE.RingGeometry(0.28,0.36,6).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:0xffc93c,side:THREE.DoubleSide}));tkr.position.y=0.04;tokenM.add(tkr);tokenM.visible=false;scene.add(tokenM);
+
+function buildUnit(d,team){
+  const g=new THREE.Group(),body=new THREE.Group();g.add(body);const mats=[];
+  const M=col=>{const m=mat(col);m.userData.col=new THREE.Color(col);mats.push(m);return m};
+  const add=(geo,m,x=0,y=0,z=0)=>{const me=new THREE.Mesh(geo,m);me.position.set(x,y,z);me.castShadow=true;body.add(me);return me};
+  const col=CLS[d.cls].h,light=new THREE.Color(col).lerp(new THREE.Color(0xffffff),.4).getHex(),dark=new THREE.Color(col).multiplyScalar(.55).getHex();
+  const idx=CHARS.filter(c=>c.cls===d.cls).indexOf(d);
+  add(new THREE.CylinderGeometry(0.38,0.42,0.12,6),M(team===0?0xf2f4fa:0x22242e),0,0.06,0);
+  const ring=add(new THREE.TorusGeometry(0.37,0.035,4,6),M(col),0,0.13,0);ring.rotation.x=Math.PI/2;
+  if(d.cls==='A'){const b=add(new THREE.OctahedronGeometry(0.33,0),M(col),0,0.56,0);b.scale.y=1.4;
+    add(new THREE.ConeGeometry(0.09,0.34,4),M(light),-0.3,0.78,0).rotation.z=0.55;add(new THREE.ConeGeometry(0.09,0.34,4),M(light),0.3,0.78,0).rotation.z=-0.55;
+    if(idx===1)add(new THREE.ConeGeometry(0.1,0.3,4),M(dark),0,1.08,0)}
+  else if(d.cls==='D'){add(new THREE.CylinderGeometry(0.3,0.36,0.6,6),M(col),0,0.42,0);add(new THREE.BoxGeometry(0.22,0.2,0.5),M(light),-0.36,0.68,0);add(new THREE.BoxGeometry(0.22,0.2,0.5),M(light),0.36,0.68,0);
+    add(new THREE.BoxGeometry(0.34,0.24,0.34),M(dark),0,0.86,0);if(idx===1)add(new THREE.BoxGeometry(0.5,0.1,0.5),M(light),0,1.02,0)}
+  else if(d.cls==='T'){add(new THREE.ConeGeometry(0.3,0.95,5),M(col),0,0.6,0);add(new THREE.IcosahedronGeometry(0.19,0),M(light),0,1.2,0);
+    if(idx===1){add(new THREE.BoxGeometry(0.5,0.05,0.14),M(dark),0,1.2,0.12)}else{add(new THREE.CylinderGeometry(0.04,0.04,0.7,4),M(dark),0.3,0.75,0).rotation.z=-0.3}}
+  else {const b=add(new THREE.IcosahedronGeometry(0.31,0),M(col),0,0.6,0);
+    const rg=add(new THREE.TorusGeometry(0.4,0.05,4,8),M(light),0,0.6,0);rg.rotation.x=Math.PI/2.3;g.userData.ring=rg;
+    if(idx===1)add(new THREE.CylinderGeometry(0.03,0.03,0.4,4),M(dark),0,1.1,0);else add(new THREE.OctahedronGeometry(0.11,0),M(light),0,1.05,0)}
+  g.userData.body=body;g.userData.mats=mats;scene.add(g);return g;
+}
+
+/* animations */
+const tweens=[];
+const tween=(dur,fn)=>new Promise(res=>{tweens.push({t:0,dur,fn,res})});
+function stepTweens(dt){for(let i=tweens.length-1;i>=0;i--){const w=tweens[i];w.t+=dt;const k=Math.min(1,w.t/w.dur);w.fn(k);if(k>=1){tweens.splice(i,1);w.res()}}}
+async function walk(u,path){for(const [c,r] of path){const a=u.mesh.position.clone(),b=cellPos(c,r);await tween(.13,k=>{u.mesh.position.lerpVectors(a,b,k);u.mesh.position.y+=Math.sin(k*Math.PI)*.16});u.c=c;u.r=r}}
+async function teleport(u,cell){await tween(.16,k=>u.mesh.scale.setScalar(1-k));u.c=cell.c;u.r=cell.r;u.mesh.position.copy(cellPos(cell.c,cell.r));await tween(.16,k=>u.mesh.scale.setScalar(k));
+  if(G.token&&u.c===G.token.c&&u.r===G.token.r)await collectToken(u)}
+const shake=u=>tween(.3,k=>{u.mesh.userData.body.position.x=Math.sin(k*34)*(1-k)*.09;});
+async function lunge(a,t){const p=a.mesh.position.clone(),q=t.mesh.position.clone().sub(p).setY(0).normalize().multiplyScalar(.35);
+  await tween(.12,k=>a.mesh.position.copy(p).addScaledVector(q,k));await tween(.14,k=>a.mesh.position.copy(p).addScaledVector(q,1-k))}
+
+/* ============ LOGIQUE : UNITÉS, EFFETS, DÉGÂTS ============ */
+function spawnUnit(d,team,c,r){const u={id:G.nid++,d,team,c,r,hp:4,alive:true,played:false,effect:null,buffs:[],flags:{},freeAtk:0};
+  u.mesh=buildUnit(d,team);u.mesh.position.copy(cellPos(c,r));u.mesh.rotation.y=team===0?0:Math.PI;G.units.push(u);return u}
+function log(h){const el=document.createElement('div');el.innerHTML=h;const L=$('#log');L.appendChild(el);while(L.children.length>9)L.firstChild.remove()}
+const toast=(m)=>{const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),1700)};
+const v3=new THREE.Vector3();
+function screenOf(pos,dy=0){v3.copy(pos);v3.y+=dy;v3.project(cam);return[(v3.x*.5+.5)*innerWidth,(-v3.y*.5+.5)*innerHeight]}
+function pop(u,text,color='#fff'){const el=document.createElement('div');el.className='flt';el.textContent=text;el.style.color=color;
+  const [x,y]=screenOf(u.mesh.position,1.2);el.style.left=x+'px';el.style.top=y+'px';$('#float').appendChild(el);setTimeout(()=>el.remove(),1400)}
+function addBuff(u,k,v,until,src){u.buffs.push({k,v,until,src:src.id});refresh()}
+function heal(u,n){const b=u.hp;u.hp=Math.min(4,u.hp+n);if(u.hp>b){pop(u,'+'+(u.hp-b)+' PV','#5fe0a5');log(`${u.d.name} récupère ${u.hp-b} PV`);if(u.effect&&u.effect.type==='toxic')u.effect=null}refresh()}
+function cleanse(u){if(u.effect){pop(u,'Purgé','#5fe0a5');u.effect=null}refresh()}
+async function addEff(t,type,src){
+  if(t.effect&&t.effect.src!==src.id){pop(t,'Déjà affecté','#aaa');log(`${t.d.name} a déjà un effet`);return}
+  t.effect={type,src:src.id,left:type==='toxic'?2:1};pop(t,EFF[type][0]+' '+EFF[type][1],'#ffd27a');log(`${t.d.name} : ${EFF[type][0]} ${EFF[type][1]}`);refresh();await sleep(250)}
+async function dmg(t,n,src,fromCombat=false){
+  if(!t.alive)return false;
+  if(sub(t)==='Juggernaut'&&t.hp===4&&!fromCombat){pop(t,'Résiste','#9cf');log(`${t.d.name} (Juggernaut) ignore ce dégât : 1er PV uniquement par combat`);return false}
+  t.hp=Math.max(0,t.hp-n);pop(t,'−'+n,'#ff6b6b');log(`${t.d.name} perd ${n} PV (${t.hp}/4)`);shake(t);refresh();await sleep(280);
+  if(t.hp<=0)await ko(t,src);return true}
+async function ko(t,src){t.alive=false;log(`<b>${t.d.name} est K.O. !</b>`);pop(t,'K.O.','#ff6b6b');
+  G.units.forEach(x=>x.buffs=x.buffs.filter(b=>b.src!==t.id||b.until==='self'));
+  await tween(.4,k=>t.mesh.scale.setScalar(1-k));t.mesh.visible=false;
+  if(src&&src.alive!==undefined&&src.team!==t.team)drawCard(src.team,'K.O.');
+  checkWin();refresh()}
+function checkWin(){if(G.phase==='over')return;for(const t of[0,1])if(alive(t).length===0){G.phase='over';G.over=1-t;showOver()}}
+function drawCard(team,why){const c=G.deck[team].pop();if(!c){G.deck[team]=newDeck();return drawCard(team,why)}G.hand[team].push(c);log(`${TEAMS[team]} piochent un renfort : <b>${c.n}</b> (${why})`);toast(`${TEAMS[team]} : renfort « ${c.n} »`);refresh()}
+const freeAdj=t=>{const o=[];for(let dc=-1;dc<=1;dc++)for(let dr=-1;dr<=1;dr++){if(!dc&&!dr)continue;const c=t.c+dc,r=t.r+dr;if(c<0||r<0||c>=N||r>=N||unitAt(c,r))continue;o.push({c,r})}return o};
+
+/* jeton renfort + roue */
+function spinWheel(first){for(let i=0;i<20;i++){let c=Math.floor(Math.random()*N),r=Math.floor(Math.random()*N);if(first){[c,r]=CENTER[Math.floor(Math.random()*4)]}
+  if(isStruct(c,r))continue;const u=unitAt(c,r);if(u){drawCard(u.team,'roue');continue}G.token={c,r};log(`Roue : nouveau jeton renfort en <span class="r">${cellName(c,r)}</span>`);break}
+  syncToken()}
+function syncToken(){if(G.token){tokenM.visible=true;tokenM.position.copy(cellPos(G.token.c,G.token.r))}else tokenM.visible=false}
+async function collectToken(u){drawCard(u.team,`${u.d.name} atteint le jeton`);G.token=null;syncToken();spinWheel(false)}
+
+/* ============ PORTÉE / DÉPLACEMENT ============ */
+function lineCells(a,b){const n=Math.max(Math.abs(b.c-a.c),Math.abs(b.r-a.r)),o=[];for(let i=1;i<n;i++)o.push([Math.round(a.c+(b.c-a.c)*i/n),Math.round(a.r+(b.r-a.r)*i/n)]);return o}
+/* 0 hors portée, 1 ok, 2 « solo » (PRE 1 vers le niveau supérieur : action unique) */
+function rangeState(u,t){
+  const d=cheb(u,t),rg=sub(u)==='Ranger',us=isStruct(u.c,u.r),ts=isStruct(t.c,t.r);let pre=stat(u,'pre');
+  if(!rg){if(us&&!ts)pre++;if(!us&&ts)pre--;if(!(us&&ts))pre-=lineCells(u,t).filter(([c,r])=>isStruct(c,r)).length}
+  if(d<=pre)return 1;
+  if(!rg&&!us&&ts&&d===1&&stat(u,'pre')===1&&!G.committed)return 2;return 0}
+function reachable(u){
+  const out=new Map();if(u.effect&&u.effect.type==='numb')return out;
+  const flank=sub(u)==='Flanker',k0=KEY(u.c,u.r);out.set(k0,{rem:stat(u,'hab'),prev:null,c:u.c,r:u.r});const q=[k0];
+  while(q.length){const k=q.shift(),cur=out.get(k);
+    for(const[dc,dr] of DIRS){const c=cur.c+dc,r=cur.r+dr;if(c<0||r<0||c>=N||r>=N||unitAt(c,r))continue;
+      const lvl=isStruct(c,r)!==isStruct(cur.c,cur.r);let rem=cur.rem-(lvl&&!flank?2:1);
+      if(rem<0){if(lvl&&cur.rem>=1)rem=0;else continue}   // monter/descendre coûte 1 HAB de plus ; HAB 1 peut toujours le faire seul
+      const kk=KEY(c,r),ex=out.get(kk);if(!ex||ex.rem<rem){out.set(kk,{rem,prev:k,c,r});q.push(kk)}}}
+  return out}
+function pathTo(u,reach,dest){const p=[];let k=KEY(dest.c,dest.r);while(k&&k!==KEY(u.c,u.r)){const n=reach.get(k);p.unshift([n.c,n.r]);k=n.prev}return p}
+function targetsFor(u,s){
+  if(s.t==='enemy')return alive(1-u.team).filter(t=>s.far?(cheb(u,t)<=s.far&&(!s.adj||freeAdj(t).length)):rangeState(u,t)===1);
+  if(s.t==='ally')return alive(u.team).filter(t=>t===u||cheb(u,t)<=stat(u,'pre')+(isStruct(u.c,u.r)?1:0));
+  if(s.t==='cell'){const o=[];for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(!unitAt(c,r)&&cheb(u,{c,r})<=s.cell)o.push({c,r});return o}
+  const rad=typeof s.rad==='function'?s.rad(u):s.rad;
+  const pool=s.aoe==='enemies'?alive(1-u.team):s.aoe==='allies'?alive(u.team):[u];return pool.filter(t=>cheb(u,t)<=rad)}
+
+/* ============ COMBAT ============ */
+const rollSet=n=>{const a=[d6()];for(let i=1;i<n;i++)a.push(d3());return a};
+const sum=a=>a.reduce((x,y)=>x+y,0);
+function paintDice(att,def,A,D,verdict){
+  const row=(u,arr,role)=>`<div class="drow t${u.team}"><span class="who">${role} · ${u.d.name}</span><span>${arr.map((v,i)=>`<i class="die ${i?'d3':''}">${v}</i>`).join('')}</span><b class="sum">${sum(arr)}</b></div>`;
+  $('#dice').innerHTML=row(att,A,'ATK')+row(def,D,'DEF')+(verdict?`<div class="verdict">${verdict}</div>`:'')}
+async function showDice(att,def,A,D,verdict){const el=$('#dice');el.hidden=false;clearTimeout(showDice.h);
+  for(let i=0;i<9;i++){paintDice(att,def,rollSet(A.length),rollSet(D.length));await sleep(65)}
+  paintDice(att,def,A,D,verdict);await sleep(900);showDice.h=setTimeout(()=>el.hidden=true,2200)}
+async function combat(att,def){
+  let A=rollSet(stat(att,'atk')),D=rollSet(stat(def,'def'));
+  if(sub(att)==='Brawler'&&att.flags.rerollAtk){att.flags.rerollAtk=false;if(A[0]<=3){const o=A[0];A[0]=d6();log(`Brawler relance son d6 (${o} → ${A[0]})`)}}
+  const sa=sum(A),sd=sum(D);
+  const verdict=sa>sd?`${def.d.name} perd 1 PV`:sa<sd?'Défense réussie':(sub(att)==='Protector'||sub(def)==='Protector')?'Égalité (Protector)':'Égalité : rien';
+  log(`<b>${att.d.name}</b> ${sa} vs <b>${def.d.name}</b> ${sd}`);
+  await lunge(att,def);await showDice(att,def,A,D,verdict);
+  if(sa>sd){await dmg(def,1,att,true);
+    if(att.alive){if(sub(att)==='Brawler')att.flags.rerollAtk=true;
+      if(sub(att)==='Assist'){const r=d3();log(`Assist : d3 = ${r}`);if(r>=2){const al=alive(att.team).filter(a=>a.hp<4).sort((a,b)=>a.hp-b.hp)[0];if(al)heal(al,1)}}}
+    return'hit'}
+  if(sa<sd){if(sub(def)==='Performer')def.flags.rerollAb=true;
+    if(sub(def)==='Engineer'){const r=d3();log(`Engineer : d3 = ${r}`);if(r>=2)heal(def,1)}return'block'}
+  if(sub(att)==='Protector')await dmg(def,1,att,true);else if(sub(def)==='Protector')await dmg(att,1,def,true);return'tie'}
+
+/* ============ TOURS ============ */
+function beginRound(){G.round++;G.turnPlayer=(G.round-1)%2;G.units.forEach(u=>u.played=false);G.sel=null;G.mode='idle';
+  log(`<span class="r">— Manche ${G.round} —</span> ${TEAMS[G.turnPlayer]} commencent`);focusNext();refresh()}
+function focusNext(){const u=alive(G.turnPlayer).find(x=>!x.played);if(u)G.cur={c:u.c,r:u.r}}
+function selectUnit(u){G.sel=u;G.committed=false;G.used={move:false,atk:false,abl:false,card:false};
+  G.actions=(u.effect&&u.effect.type==='stun')?1:2;G.mode=(u.effect&&u.effect.type==='frozen')?'frozen':'sel';
+  if(G.actions===1)toast('Assommé : une seule action ce tour');recalc();refresh()}
+function commit(){if(G.committed)return;G.committed=true;const u=G.sel;u.buffs=u.buffs.filter(b=>!(b.until==='turn'&&b.src===u.id))}
+async function after(){G.busy=false;if(G.phase==='over')return;
+  if(G.actions<=0&&!(G.sel.freeAtk>0&&attackTargets(G.sel).length)){await sleep(300);await endTurn()}else{G.mode='sel';recalc();refresh()}}
+async function endTurn(){const u=G.sel;if(!u||G.busy&&false)return;G.busy=true;
+  u.played=true;u.buffs=u.buffs.filter(b=>b.until!=='self');u.freeAtk=0;
+  if(u.effect&&['stun','numb','disrupt','jam','frozen'].includes(u.effect.type))u.effect=null;
+  G.sel=null;G.mode='idle';G.hl=new Map();
+  const other=1-G.turnPlayer,av=t=>alive(t).some(x=>!x.played);
+  if(av(other))G.turnPlayer=other;else if(!av(G.turnPlayer)){await endRound()}
+  if(G.phase==='over'){G.busy=false;return}
+  focusNext();G.busy=false;recalc();refresh()}
+async function endRound(){
+  for(const u of[...G.units]){if(!u.alive||!u.effect)continue;
+    if(u.effect.type==='toxic'){log(`${u.d.name} souffre du poison`);const l=--u.effect.left;await dmg(u,1,null);if(u.alive&&l<=0)u.effect=null}
+    else if(u.effect.type==='burn'){const r=d6();log(`Brûlure de ${u.d.name} : d6 = ${r}`);if(r<=3){u.effect=null;pop(u,'Éteint','#9cf')}else await dmg(u,1,null)}
+    if(G.phase==='over')return}
+  G.units.forEach(u=>u.buffs=u.buffs.filter(b=>b.until!=='round'));
+  await sleep(250);beginRound()}
+
+/* actions du joueur */
+function attackTargets(u){const o=[];for(const t of alive(1-u.team)){const s=rangeState(u,t);if(s)o.push({t,solo:s===2})}return o}
+function can(cmd){const u=G.sel;if(!u)return[false,'Aucun personnage'];if(G.mode==='frozen')return[false,'Gelé'];const eff=u.effect&&u.effect.type;
+  switch(cmd){
+   case'move':if(G.used.move)return[false,'Déjà déplacé'];if(G.actions<=0)return[false,'Plus d\'actions'];if(eff==='numb')return[false,'Engourdi'];if(reachable(u).size<2)return[false,'Aucune case'];return[true];
+   case'atk':if(u.freeAtk>0)return attackTargets(u).length?[true]:[false,'Personne à portée'];if(G.used.atk)return[false,'Déjà attaqué'];if(G.actions<=0)return[false,'Plus d\'actions'];
+     return attackTargets(u).length?[true]:[false,'Personne à portée'];
+   case'abl':case'ult':{const s=cmd==='abl'?u.d.ab:u.d.ul;if(G.used.abl)return[false,'Capacité déjà utilisée'];if(G.actions<=0)return[false,'Plus d\'actions'];if(eff==='disrupt')return[false,'Bouleversement'];
+     if(cmd==='ult'){if(G.round<2)return[false,'Dès la manche 2'];if(G.ult[u.team])return[false,'Ultime déjà utilisé']}
+     return targetsFor(u,s).length?[true]:[false,'Aucune cible']}
+   case'card':if(G.used.card)return[false,'1 renfort par tour'];if(!G.hand[u.team].length)return[false,'Aucun renfort'];if(eff==='jam')return[false,'Brouillage'];return[true]}}
+async function doMove(dest){const u=G.sel,reach=reachable(u);G.busy=true;commit();const p=pathTo(u,reach,dest);G.hl=new Map();paintHL();
+  await walk(u,p);G.used.move=true;G.actions--;log(`${u.d.name} → ${cellName(u.c,u.r)}`);
+  if(G.token&&u.c===G.token.c&&u.r===G.token.r)await collectToken(u);await after()}
+async function doAttack(t,solo){const u=G.sel;G.busy=true;commit();G.hl=new Map();paintHL();
+  if(u.freeAtk>0)u.freeAtk--;else{G.actions--;G.used.atk=true}
+  if(solo)G.actions=0;await combat(u,t);await after()}
+async function doAbility(isUlt,tg){const u=G.sel,s=isUlt?u.d.ul:u.d.ab;G.busy=true;commit();G.hl=new Map();paintHL();
+  G.actions--;G.used.abl=true;if(isUlt)G.ult[u.team]=true;
+  log(`<b>${u.d.name}</b> utilise ${isUlt?'l\'ultime ':''}<span class="r">${s.n}</span>`);pop(u,s.n,'#d9b8ff');
+  await s.run(u,tg);await sleep(200);if(G.phase==='over')return;await after()}
+async function useCard(i){const u=G.sel,c=G.hand[u.team][i];G.busy=true;commit();G.hand[u.team].splice(i,1);G.used.card=true;
+  log(`<b>${u.d.name}</b> joue le renfort <span class="r">${c.n}</span>`);await c.use(u);await sleep(200);G.mode='sel';await after()}
+
+/* ============ SURBRILLANCES ============ */
+function recalc(){G.hl=new Map();G.solo=new Set();
+  if(G.phase==='place'){const team=G.pl%2;SPAWN[team].forEach(([c,r])=>{if(!unitAt(c,r))G.hl.set(KEY(c,r),'place')});paintHL();return}
+  const u=G.sel;if(!u||G.phase!=='play'){paintHL();return}
+  if(G.mode==='move'){for(const[k] of reachable(u))if(k!==KEY(u.c,u.r))G.hl.set(k,'move')}
+  else if(G.mode==='atk'){for(const{t,solo} of attackTargets(u)){G.hl.set(KEY(t.c,t.r),'atk');if(solo)G.solo.add(KEY(t.c,t.r))}}
+  else if(G.mode==='abl'||G.mode==='ult'){const s=G.mode==='abl'?u.d.ab:u.d.ul,ts=targetsFor(u,s);
+    for(const t of ts)G.hl.set(KEY(t.c,t.r),s.t==='ally'?'ally':'abl')}
+  paintHL()}
+
+/* ============ HUD ============ */
+const hearts=u=>'♥'.repeat(u.hp)+'<i>'+'♥'.repeat(4-u.hp)+'</i>';
+const fxIcon=u=>u.effect?EFF[u.effect.type][0]:'';
+function refresh(){
+  if(G.phase==='draft'||G.phase==='place'){renderTop();renderRosters();$('#dock').style.display=G.phase==='place'?'grid':'none';renderDock();return}
+  $('#dock').style.display='grid';renderTop();renderRosters();renderDock()}
+function renderTop(){
+  const b=$('#banner'),h=$('#hint');
+  if(G.phase==='draft'){b.innerHTML='<b>Draft des personnages</b>';h.innerHTML='Choisis une carte par classe';return}
+  if(G.phase==='place'){const t=G.pl%2,d=G.picks[t][Math.floor(G.pl/2)];b.innerHTML=`<span class="dot t${t}"></span>Placement · ${TEAMS[t]}`;h.innerHTML=`Place <b>${d.name}</b> sur une case jaune : <kbd>←↑↓→</kbd> puis <kbd>Entrée</kbd> · <kbd>X</kbd> placement auto`;return}
+  if(G.phase==='over'){b.innerHTML='<b>Partie terminée</b>';h.innerHTML='';return}
+  b.innerHTML=`<span>Manche ${G.round}</span><span class="dot t${G.turnPlayer}"></span><span>Tour des ${TEAMS[G.turnPlayer]}</span>`;
+  const m=G.mode,u=G.sel;let t='';
+  if(m==='idle')t=`Choisis un personnage <kbd>Entrée</kbd> ou <kbd>Tab</kbd> pour passer au suivant`;
+  else if(m==='frozen')t=`${u.d.name} est gelé 🧊 : <kbd>F</kbd> briser la glace (−1 PV) et jouer · <kbd>E</kbd> passer son tour`;
+  else if(m==='sel')t=`Actions restantes : ${G.actions} · <kbd>1</kbd> Déplacer <kbd>2</kbd> Attaquer <kbd>3</kbd> Capacité <kbd>4</kbd> Ultime <kbd>5</kbd> Renfort <kbd>E</kbd> Fin`;
+  else if(m==='move')t='Choisis une case bleue · <kbd>Entrée</kbd> valider · <kbd>Échap</kbd> annuler';
+  else if(m==='atk')t='Choisis un ennemi rouge · <kbd>Entrée</kbd> attaquer · <kbd>Échap</kbd> annuler';
+  else if(m==='abl'||m==='ult'){const s=m==='abl'?u.d.ab:u.d.ul;t=s.t==='none'?`${s.n} : <kbd>Entrée</kbd> pour lancer (unités concernées en violet/vert)`:`${s.n} : choisis une cible en surbrillance · <kbd>Entrée</kbd>`}
+  else if(m==='card')t='<kbd>↑↓</kbd> choisir · <kbd>Entrée</kbd> jouer · <kbd>Échap</kbd> annuler';
+  h.innerHTML=t}
+function ucHTML(u){return`<div class="uc ${G.sel===u?'sel':''} ${u.played&&u.alive?'played':''} ${u.alive?'':'dead'}" data-id="${u.id}" style="--cc:${CLS[u.d.cls].c}">
+  <div class="nm">${u.d.name}<small>${u.d.sub}</small></div><div class="hp">${hearts(u)}</div>
+  <div class="st">ATK ${stat(u,'atk')} DEF ${stat(u,'def')} HAB ${stat(u,'hab')} PRE ${stat(u,'pre')}</div><div class="fx">${fxIcon(u)}${u.played&&u.alive?' ✔':''}</div></div>`}
+function renderRosters(){[0,1].forEach(t=>{const us=G.units.filter(u=>u.team===t);
+  $(t?'#rosterB':'#rosterW').innerHTML=`<div class="rh"><b>${TEAMS[t]}</b><span>Renforts : ${G.hand[t].length} · Ult ${G.ult[t]?'✖':'✔'}</span></div>`+us.map(ucHTML).join('')})
+  document.querySelectorAll('.uc').forEach(el=>el.onclick=()=>{const u=G.units.find(x=>x.id==el.dataset.id);if(!u)return;G.cur={c:u.c,r:u.r};if(G.phase==='play'&&!G.busy&&G.mode==='idle')confirmAct()})}
+function renderDock(){
+  const insp=G.sel||(G.phase==='play'?unitAt(G.cur.c,G.cur.r):null),info=$('#info'),acts=$('#acts'),pips=$('#pips'),cards=$('#cards');
+  if(!insp){info.innerHTML=G.phase==='place'?'<div class="abil">Place tes 4 personnages sur les cases de départ de ton camp.</div>':'<div class="abil">Déplace le curseur sur un personnage pour voir ses stats.</div>';acts.innerHTML='';pips.innerHTML='';cards.innerHTML='';return}
+  const u=insp,d=u.d;
+  info.innerHTML=`<h3 style="--cc:${CLS[d.cls].c}">${d.name}<span class="chip">${CLS[d.cls].n} · ${d.sub}</span><span style="color:var(--mut);font-weight:500;font-size:12px">${TEAMS[u.team]} · ${hearts(u)} ${u.effect?EFF[u.effect.type][0]+' '+EFF[u.effect.type][1]:''}</span></h3>
+   <div class="stats"><span>ATK <b>${stat(u,'atk')}</b></span><span>DEF <b>${stat(u,'def')}</b></span><span>HAB <b>${stat(u,'hab')}</b></span><span>PRE <b>${stat(u,'pre')}</b></span></div>
+   <div class="abil"><b>${d.ab.n}</b> — ${d.ab.x}<br><b>Ultime · ${d.ul.n}</b> — ${d.ul.x}${G.variant?`<br><b>${d.sub}</b> — ${SUBTXT[d.sub]}`:''}</div>`;
+  if(G.sel!==u||G.phase!=='play'){acts.innerHTML='';pips.innerHTML='';cards.innerHTML='';return}
+  const B=(k,label,cmd,on)=>{const[ok,why]=can(cmd);return`<button class="btn ${on?'on':''}" data-cmd="${cmd}" ${ok?'':'disabled'} title="${why||''}"><kbd>${k}</kbd>${label}${ok?'':` <small style="color:var(--mut)">(${why})</small>`}</button>`};
+  acts.innerHTML=G.mode==='frozen'?`<button class="btn" data-cmd="thaw"><kbd>F</kbd>Briser (−1 PV)</button><button class="btn" data-cmd="end"><kbd>E</kbd>Passer</button>`:
+   B(1,'Déplacer','move',G.mode==='move')+B(2,'Attaquer','atk',G.mode==='atk')+B(3,d.ab.n,'abl',G.mode==='abl')+B(4,'Ult · '+d.ul.n,'ult',G.mode==='ult')+B(5,`Renfort (${G.hand[u.team].length})`,'card',G.mode==='card')+`<button class="btn" data-cmd="end"><kbd>E</kbd>Fin de tour</button>`;
+  acts.querySelectorAll('button').forEach(b=>b.onclick=()=>command(b.dataset.cmd));
+  pips.innerHTML=`Actions : ${[0,1].map(i=>`<span class="pip ${i<G.actions?'':'off'}"></span>`).join('')}${u.freeAtk>0?` · Blitz : ${u.freeAtk} attaque(s) gratuite(s)`:''}${u.buffs.length?' · Bonus : '+u.buffs.map(b=>`${b.v>0?'+':''}${b.v} ${b.k.toUpperCase()}`).join(', '):''}`;
+  const hand=G.hand[u.team];cards.innerHTML=hand.map((c,i)=>`<div class="card ${G.mode==='card'&&i===G.cardIdx?'cur':''}"><b>${c.n}</b><br>${c.x}</div>`).join('')}
+function renderBadges(){const el=$('#badges');let h='';for(const u of G.units){if(!u.alive||!u.mesh.visible)continue;const[x,y]=screenOf(u.mesh.position,1.35);
+  h+=`<div class="badge t${u.team}" style="left:${x}px;top:${y}px"><div class="fx">${fxIcon(u)}</div><div class="hp">${hearts(u)}</div><span class="nm">${u.d.name}</span></div>`}
+  if(el._h!==h){el.innerHTML=h;el._h=h}}
+function renderKeys(){const K=[['←↑↓→ / WASD','Curseur'],['Entrée / Espace','Valider'],['Tab','Perso suivant'],['1','Déplacer'],['2','Attaquer'],['3','Capacité'],['4','Ultime (manche 2+)'],['5','Carte renfort'],['E','Fin de tour'],['Échap','Annuler'],['V','Vue plongeante/inclinée'],['+ / −','Zoom'],['H','Masquer l\'aide']];
+  $('#keys').innerHTML='<div class="kh"><span>Contrôles</span><kbd>H</kbd></div>'+K.map(([k,t])=>`<kbd>${k}</kbd><span>${t}</span>`).join('')}
+
+/* ============ DRAFT & PLACEMENT ============ */
+function startDraft(){G.units.forEach(u=>scene.remove(u.mesh));G.units=[];G.phase='draft';G.picks=[[],[]];G.dstep=0;G.dsel=0;G.round=0;G.hand=[[],[]];G.deck=[newDeck(),newDeck()];G.ult=[false,false];G.sel=null;G.mode='idle';G.token=null;G.over=null;G.busy=false;
+  $('#log').innerHTML='';$('#dice').hidden=true;G.hl=new Map();paintHL();syncToken();showDraft();refresh()}
+function showDraft(){const ov=$('#overlay');ov.className='on';const st=G.dstep;const picker=st%2;
+  const col=cls=>{const opts=CHARS.filter(c=>c.cls===cls),i=ORDER.indexOf(cls);
+    return`<div class="dcol ${i===st?'cur':''}" style="--cc:${CLS[cls].c}"><h4>${CLS[cls].n}${i===st?` · ${TEAMS[picker]} choisissent`:''}</h4>`+opts.map((d,j)=>{
+      const owner=G.picks[0].includes(d)?0:G.picks[1].includes(d)?1:-1;
+      return`<div class="dc ${owner>=0?'t'+owner:''} ${i===st&&j===G.dsel?'sel':''}" data-cls="${cls}" data-j="${j}" style="--cc:${CLS[cls].c}">
+      <h5>${d.name}<small>${d.sub}</small></h5><div class="stats"><span>ATK <b>${d.atk}</b></span><span>DEF <b>${d.def}</b></span><span>HAB <b>${d.hab}</b></span><span>PRE <b>${d.pre}</b></span></div>
+      ${owner>=0?`<div class="who">→ ${TEAMS[owner]}</div>`:''}<p><b>${d.ab.n}</b> — ${d.ab.x}</p><p><b>Ultime · ${d.ul.n}</b> — ${d.ul.x}</p><p><i>${d.sub} :</i> ${SUBTXT[d.sub]}</p></div>`}).join('')+`</div>`};
+  ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> Arena</h1><p>Mode casual : chaque camp reçoit un personnage par classe (Attaque, Défense, Technique, Soutien). Les Blancs choisissent en premier en Attaque, puis on alterne.</p>
+   <div class="dgrid">${ORDER.map(col).join('')}</div>
+   <div class="ovbar"><span><kbd>←</kbd> <kbd>→</kbd> changer de carte</span><span><kbd>Entrée</kbd> choisir</span><span><kbd>R</kbd> tout au hasard</span><span><kbd>B</kbd> Variante avancée : <b style="color:var(--amber)">${G.variant?'ACTIVE':'désactivée'}</b></span></div></div>`;
+  ov.querySelectorAll('.dc').forEach(el=>el.onclick=()=>{if(ORDER.indexOf(el.dataset.cls)===G.dstep){G.dsel=+el.dataset.j;draftPick()}})}
+function draftPick(){const cls=ORDER[G.dstep],opts=CHARS.filter(c=>c.cls===cls),picker=G.dstep%2;
+  G.picks[picker].push(opts[G.dsel]);G.picks[1-picker].push(opts[1-G.dsel]);G.dstep++;G.dsel=0;
+  if(G.dstep>=4){$('#overlay').className='';startPlacement()}else showDraft()}
+function startPlacement(){G.phase='place';G.pl=0;const t=0;G.cur={c:SPAWN[t][0][0],r:SPAWN[t][0][1]};recalc();refresh();log('Placement : choisis la case de départ de chaque personnage')}
+function placeHere(c,r){if(G.hl.get(KEY(c,r))!=='place'){toast('Choisis une case jaune');return}
+  const t=G.pl%2,d=G.picks[t][Math.floor(G.pl/2)];spawnUnit(d,t,c,r);G.pl++;
+  if(G.pl>=8){G.phase='play';spinWheel(true);log('Roue initiale : premier jeton renfort placé au centre');beginRound();recalc();return}
+  const nt=G.pl%2;G.cur={c:SPAWN[nt][0][0],r:SPAWN[nt][0][1]};recalc();refresh()}
+function autoPlace(){while(G.phase==='place'){const t=G.pl%2,free=SPAWN[t].find(([c,r])=>!unitAt(c,r));placeHere(free[0],free[1])}}
+function showOver(){const ov=$('#overlay');ov.className='on';
+  ov.innerHTML=`<div class="ov"><div class="big">Victoire des <span style="color:var(--amber)">${TEAMS[G.over]}</span></div><p style="text-align:center">Tous les personnages adverses sont éliminés.</p><p style="text-align:center"><kbd>Entrée</kbd> pour rejouer</p></div>`}
+
+/* ============ ENTRÉES ============ */
+async function command(cmd){
+  if(G.busy||G.phase!=='play'||!G.sel)return;const u=G.sel;
+  if(cmd==='end'){if(G.mode==='frozen'){log(`${u.d.name} reste gelé et passe son tour`)}await endTurn();return}
+  if(cmd==='thaw'){if(G.mode!=='frozen')return;G.busy=true;u.effect=null;log(`${u.d.name} brise la glace`);await dmg(u,1,null);G.busy=false;if(u.alive){G.mode='sel';recalc();refresh()}else{await endTurn()}return}
+  if(G.mode==='frozen')return;
+  if(G.mode===cmd){G.mode='sel';recalc();refresh();return}
+  const[ok,why]=can(cmd);if(!ok){toast(why);return}
+  if(cmd==='card'){G.mode='card';G.cardIdx=0;refresh();return}
+  G.mode=cmd;recalc();
+  if(cmd==='move'){const p=[...G.hl.keys()][0];if(p){const[c,r]=p.split(',').map(Number);G.cur={c,r}}}
+  else{const k=[...G.hl.keys()][0];if(k){const[c,r]=k.split(',').map(Number);G.cur={c,r}}}
+  refresh()}
+async function confirmAct(){
+  if(G.busy)return;const{c,r}=G.cur;
+  if(G.phase==='place')return placeHere(c,r);
+  if(G.phase!=='play')return;
+  if(G.mode==='idle'){const u=unitAt(c,r);if(u&&u.team===G.turnPlayer&&!u.played)selectUnit(u);else toast(u&&u.played?'Ce personnage a déjà joué cette manche':`Choisis un personnage des ${TEAMS[G.turnPlayer]}`);return}
+  const u=G.sel,k=KEY(c,r),h=G.hl.get(k),t=unitAt(c,r);
+  if(G.mode==='card'){useCard(G.cardIdx);return}
+  if(G.mode==='sel'){if(t&&t!==u&&t.team===u.team&&!t.played&&!G.committed)selectUnit(t);else toast('Choisis une action (1-5)');return}
+  if(G.mode==='move'){if(h==='move')return doMove({c,r})}
+  else if(G.mode==='atk'){if(t&&h==='atk')return doAttack(t,G.solo.has(k))}
+  else if(G.mode==='abl'||G.mode==='ult'){const isU=G.mode==='ult',s=isU?u.d.ul:u.d.ab;
+    if(s.t==='none')return doAbility(isU,targetsFor(u,s));
+    if(s.t==='cell'){if(h)return doAbility(isU,{c,r})}else if(t&&h)return doAbility(isU,t)}
+  toast('Cible ou case invalide')}
+const MOVE={arrowup:[0,-1],w:[0,-1],arrowdown:[0,1],s:[0,1],arrowleft:[-1,0],a:[-1,0],arrowright:[1,0],d:[1,0],z:[0,-1],q:[-1,0]};
+function cancel(){if(G.busy||G.phase!=='play')return;if(G.mode==='sel'&&!G.committed&&G.sel){G.sel=null;G.mode='idle';recalc();refresh()}else if(['move','atk','abl','ult','card'].includes(G.mode)){G.mode='sel';recalc();refresh()}}
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();if(e.ctrlKey||e.metaKey||e.altKey)return;
+  if(['arrowup','arrowdown','arrowleft','arrowright',' ','tab'].includes(k))e.preventDefault();
+  if(G.phase==='draft'){
+    if(k==='arrowleft'||k==='arrowright'||k==='a'||k==='d'){G.dsel=1-G.dsel;showDraft()}
+    else if(k==='enter'||k===' ')draftPick();
+    else if(k==='b'){G.variant=!G.variant;showDraft()}
+    else if(k==='r'){while(G.dstep<4){G.dsel=Math.round(Math.random());draftPick()}}
+    return}
+  if(G.phase==='over'){if(k==='enter'){$('#overlay').className='';startDraft()}return}
+  if(k==='v'){camMode=1-camMode;return}
+  if(k==='+'||k==='='){zoomMul=Math.max(.6,zoomMul-.1);resize();return}
+  if(k==='-'||k==='_'){zoomMul=Math.min(1.6,zoomMul+.1);resize();return}
+  if(k==='h'){$('#keys').classList.toggle('min');return}
+  if(G.phase==='place'&&k==='x'){autoPlace();return}
+  if(G.busy)return;
+  if(G.mode==='card'){
+    if(k==='arrowup'||k==='w'){G.cardIdx=(G.cardIdx+G.hand[G.sel.team].length-1)%G.hand[G.sel.team].length;refresh();return}
+    if(k==='arrowdown'||k==='s'){G.cardIdx=(G.cardIdx+1)%G.hand[G.sel.team].length;refresh();return}
+  }
+  if(MOVE[k]&&G.mode!=='card'){const[dc,dr]=MOVE[k];G.cur={c:Math.max(0,Math.min(N-1,G.cur.c+dc)),r:Math.max(0,Math.min(N-1,G.cur.r+dr))};refresh();return}
+  if(k==='enter'||k===' '){confirmAct();return}
+  if(k==='escape'||k==='backspace'){cancel();return}
+  if(G.phase!=='play')return;
+  if(k==='tab'){const list=alive(G.turnPlayer).filter(u=>!u.played);if(!list.length)return;
+    if(G.sel&&G.committed){toast('Termine d\'abord le tour de '+G.sel.d.name);return}
+    const cur=list.findIndex(u=>u.c===G.cur.c&&u.r===G.cur.r),n=list[(cur+1)%list.length];G.cur={c:n.c,r:n.r};
+    if(G.sel)selectUnit(n);else refresh();return}
+  const cmd={'1':'move','2':'atk','3':'abl','4':'ult','5':'card',e:'end',f:'thaw'}[k];if(cmd)command(cmd)});
+
+// souris
+const ray=new THREE.Raycaster(),mp=new THREE.Vector2();
+function pick(ev){const r=canvas.getBoundingClientRect();mp.set((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1);ray.setFromCamera(mp,cam);const h=ray.intersectObjects(tiles)[0];return h&&h.object.userData}
+canvas.addEventListener('pointermove',ev=>{if(G.phase==='draft'||G.busy)return;const p=pick(ev);if(p&&(p.c!==G.cur.c||p.r!==G.cur.r)){G.cur={c:p.c,r:p.r};renderDock()}});
+canvas.addEventListener('click',ev=>{if(G.phase==='draft')return;const p=pick(ev);if(p){G.cur={c:p.c,r:p.r};confirmAct()}});
+canvas.addEventListener('contextmenu',ev=>{ev.preventDefault();cancel()});
+
+/* ============ BOUCLE ============ */
+let last=performance.now();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;const t=now/1000;
+  stepTweens(dt);
+  camNow.lerp(CAMPOS[camMode],1-Math.exp(-dt*5));cam.position.copy(camNow);cam.lookAt(0,0,camMode?0.9:1.5);cam.updateMatrixWorld();
+  const cp=cellPos(G.cur.c,G.cur.r,0.05+Math.sin(t*5)*.03);cursor.position.copy(cp);cursor.visible=G.phase!=='draft'&&G.phase!=='over';
+  cursor.material.color.setHex(G.busy?0x777777:0xffb42e);
+  if(G.sel&&G.sel.alive){selRing.visible=true;selRing.position.copy(G.sel.mesh.position);selRing.position.y+=0.16;selRing.rotation.y=t}else selRing.visible=false;
+  tk.rotation.y=t*2;tk.position.y=0.55+Math.sin(t*3)*.07;tkr.rotation.z=t;
+  for(const u of G.units){if(!u.alive)continue;const b=u.mesh.userData.body;b.position.y=Math.sin(t*2+u.id)*.03;if(u.mesh.userData.ring)u.mesh.userData.ring.rotation.z=t*1.5;
+    const dim=u.played?.45:1;for(const m of u.mesh.userData.mats)m.color.copy(m.userData.col).multiplyScalar(dim)}
+  paintHL();renderer.render(scene,cam);renderBadges();requestAnimationFrame(frame)}
+
+resize();renderKeys();startDraft();requestAnimationFrame(frame);
+</script>
