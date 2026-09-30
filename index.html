@@ -149,6 +149,37 @@ kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;bo
 #coach .ch{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);font-weight:700;margin-bottom:4px}
 #coach .ct{font-size:14px;line-height:1.45} #coach .cf{margin-top:8px;display:flex;gap:8px;align-items:center;color:var(--mut);font-size:12px}
 #coach .bar{height:4px;border-radius:2px;background:#ffffff18;margin-top:6px;overflow:hidden} #coach .bar i{display:block;height:100%;background:var(--amber);transition:width .3s}
+
+#mtoggle{position:absolute;left:calc(100% + 10px);top:0;pointer-events:auto;white-space:nowrap;font-size:11px;padding:4px 9px}
+#camctl{position:absolute;right:8px;top:50%;transform:translateY(-50%);display:none;flex-direction:column;gap:6px;z-index:5}
+#camctl .btn{width:42px;height:42px;justify-content:center;font-size:18px;padding:0;background:#181c29dd}
+body.mobile #camctl{display:flex}
+body.mobile #mtoggle{display:none}
+body.mobile #keys,body.mobile #log,body.mobile .roster{display:none}
+body.mobile #fxref{display:none}
+body.mobile #fxref.open{display:block;position:fixed;left:8px;right:60px;bottom:auto;top:56px;width:auto;max-height:65%;z-index:25;font-size:12px}
+body.mobile #top{top:6px;max-width:calc(100% - 16px)}
+body.mobile #banner{padding:4px 10px;font-size:11px;gap:8px;white-space:nowrap;max-width:100%;overflow:hidden}
+body.mobile #hint{font-size:12px;padding:4px 8px}
+body.mobile #dock{left:0;right:0;bottom:0;transform:none;width:auto;border-radius:12px 12px 0 0;padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));grid-template-columns:1fr;gap:6px;z-index:8}
+body.mobile #acts{max-width:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;justify-content:stretch}
+body.mobile .btn{min-height:40px;touch-action:manipulation}
+body.mobile .mb{flex-direction:column;justify-content:center;gap:1px;padding:4px 2px;font-size:11px;position:relative;text-align:center;line-height:1.1}
+body.mobile .mb .ic{font-size:17px} body.mobile .mb .lb{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.mobile .mb .cnt{position:absolute;top:2px;right:3px;font-size:9px;padding:0 4px}
+body.mobile .mh{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:center;border-left:4px solid var(--cc);padding-left:8px} body.mobile .mh b{font-size:15px} body.mobile .mst{font-size:11px;color:var(--mut);font-family:var(--mono);flex:1;min-width:0}
+body.mobile .mi{min-height:30px;padding:2px 10px}
+body.mobile #info .abil{max-height:22vh;overflow:auto;margin-top:4px}
+body.mobile #pips{font-size:11px}
+body.mobile .mcard{font:inherit;color:var(--txt);text-align:left;max-width:none;flex:1 1 40%;min-height:52px;cursor:pointer}
+body.mobile #coach{top:64px;left:8px;right:8px;width:auto;font-size:11px;padding:6px 10px;max-height:26vh;overflow:auto} body.mobile #coach .ct{font-size:12px;line-height:1.35} body.mobile #coach .cf{margin-top:4px}
+body.mobile #dice{top:110px;min-width:0;width:calc(100% - 24px);padding:8px 10px}
+body.mobile #toast{top:auto;bottom:230px}
+body.mobile .ov h1{font-size:22px} body.mobile #overlay{padding:12px 10px}
+body.mobile .modes,body.mobile .netgrid{grid-template-columns:1fr} body.mobile .mode{padding:12px} body.mobile .ovbar{gap:8px} body.mobile .ovbar span{display:none}
+body.mobile .pgrid{grid-template-columns:repeat(auto-fill,minmax(118px,1fr))} body.mobile .slots{grid-template-columns:repeat(2,minmax(0,1fr))}
+body.mobile .pinfo{max-height:26vh;overflow:auto;font-size:12px} body.mobile .tab{padding:6px 8px;font-size:12px} body.mobile .tab kbd{display:none}
+body.mobile kbd{display:none}
 @media (min-width:1101px){#dock{width:min(820px,calc(100% - 600px))}}
 @media (max-width:1100px){.roster{display:none}#keys{display:none}#coach{top:110px}}
 @media (max-width:700px){#log{display:none}#dock{grid-template-columns:1fr}#acts{justify-content:flex-start}}
@@ -157,13 +188,14 @@ kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;bo
 <div id="app">
   <canvas id="c" tabindex="0"></canvas>
   <div id="badges"></div><div id="float"></div>
-  <div id="top"><div id="banner"></div><div id="hint"></div></div>
+  <div id="top"><div id="banner"></div><div id="hint"></div><button class="btn" id="mtoggle"></button></div>
   <div id="toast"></div>
   <aside class="roster" id="rosterW"></aside><aside class="roster" id="rosterB"></aside><aside id="fxref"></aside>
   <section id="dock"><div id="info"></div><div id="acts"></div><div id="pips"></div><div id="cards"></div></section>
   <div id="keys"></div>
   <div id="log"></div>
   <div id="coach" hidden></div>
+  <div id="camctl"></div>
   <div id="dice" hidden></div>
   <div id="overlay"></div>
 </div>
@@ -173,10 +205,10 @@ kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;bo
 'use strict';
 /* ============ DONNÉES ============ */
 const $=s=>document.querySelector(s);
-const N=8, TEAMS=['Blancs','Noirs'], KEY=(c,r)=>c+','+r, DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
-const STRUCT=new Set(['1,3','2,3','5,4','6,4','2,5','2,6','5,2','5,1']);
-const SPAWN=[[[1,6],[3,7],[4,7],[6,6]],[[1,1],[3,0],[4,0],[6,1]]];
-const CENTER=[[3,3],[4,3],[3,4],[4,4]];
+const N=10, OFF=(N-1)/2, PB=N/2+1, TEAMS=['Blancs','Noirs'], KEY=(c,r)=>c+','+r, DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
+const STRUCT=new Set(['2,4','3,4','6,5','7,5','7,2','7,3','2,6','2,7','4,1','5,8','8,5','1,4']);
+const SPAWN=[[[1,8],[4,9],[5,9],[8,8]],[[8,1],[5,0],[4,0],[1,1]]];
+const CENTER=[[4,4],[5,4],[4,5],[5,5]];
 const CLS={A:{n:'Attaque',c:'#ee5b4b',h:0xee5b4b},D:{n:'Défense',c:'#4a8cf0',h:0x4a8cf0},T:{n:'Technique',c:'#3fc48a',h:0x3fc48a},S:{n:'Soutien',c:'#efbf45',h:0xefbf45}};
 const ORDER=['A','D','T','S'];
 const EFF={burn:['🔥','Brûlé'],toxic:['☣️','Toxique'],stun:['💫','Assommé'],numb:['🩹','Engourdi'],disrupt:['🌌','Bouleversement'],jam:['📡','Brouillage'],frozen:['🧊','Gelé']};
@@ -498,8 +530,8 @@ const REIN=[
 const newDeck=()=>shuffle([...REIN,...REIN].map(c=>({...c})));
 
 /* ============ ÉTAT ============ */
-const G={fast:false,online:false,myTeam:0,zones:[],chain:[0,0],multi:[],pv:{hl:new Map(),mark:new Map()},budget:14,bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,phase:'menu',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
-  cur:{c:3,r:6},hl:new Map(),solo:new Set(),token:null,hand:[[],[]],deck:[newDeck(),newDeck()],ult:[false,false],
+const G={mobile:false,mInfo:false,fast:false,online:false,myTeam:0,zones:[],chain:[0,0],multi:[],pv:{hl:new Map(),mark:new Map()},budget:14,bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,phase:'menu',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
+  cur:{c:4,r:8},hl:new Map(),solo:new Set(),token:null,hand:[[],[]],deck:[newDeck(),newDeck()],ult:[false,false],
   picks:[[],[]],dstep:0,dsel:0,pl:0,cardIdx:0,nid:1,over:null};
 const inMenus=()=>G.phase==='menu'||G.phase==='pick'||G.phase==='net';
 const ctl=t=>G.online?t===G.myTeam:!(G.bot&&t===1);
@@ -524,7 +556,7 @@ const cam=new THREE.OrthographicCamera(-1,1,1,-1,0.1,80);
 const CAMHOME={yaw:0,pitch:1.16,zoom:1,px:0,pz:1.0};
 const CAMT={...CAMHOME},CAMC={...CAMHOME};
 let baseHH=6.5,shakeAmp=0,stopT=0;
-function resize(){const w=innerWidth,h=innerHeight,a=w/h;renderer.setSize(w,h,false);baseHH=Math.max(6.5,6.0/a);applyFrustum()}
+function resize(){const w=innerWidth,h=innerHeight,a=w/h;renderer.setSize(w,h,false);baseHH=Math.max(G.mobile?5.6:6.5,(G.mobile?5.0:6.0)/a)*N/8;applyFrustum()}
 function applyFrustum(){const a=innerWidth/innerHeight,hh=baseHH*CAMC.zoom;cam.left=-hh*a;cam.right=hh*a;cam.top=hh;cam.bottom=-hh;cam.updateProjectionMatrix()}
 function updateCam(dt){const k=1-Math.exp(-dt*9);for(const key in CAMC)CAMC[key]+=(CAMT[key]-CAMC[key])*k;applyFrustum();
   const d=30,cp=Math.cos(CAMC.pitch);cam.position.set(CAMC.px+Math.sin(CAMC.yaw)*cp*d,Math.sin(CAMC.pitch)*d,CAMC.pz+Math.cos(CAMC.yaw)*cp*d);
@@ -536,32 +568,32 @@ function screenDir(sx,sy){const q=Math.round(CAMT.yaw/(Math.PI/2))*Math.PI/2,c=M
 addEventListener('resize',resize);
 
 scene.add(new THREE.HemisphereLight(0xdfe8ff,0x2b3048,0.9));
-const sun=new THREE.DirectionalLight(0xfff0d8,0.85);sun.position.set(-6,13,6);sun.castShadow=true;
-Object.assign(sun.shadow.camera,{left:-7,right:7,top:7,bottom:-7,near:1,far:40});sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+const sun=new THREE.DirectionalLight(0xfff0d8,0.85);sun.position.set(-7,15,7);sun.castShadow=true;
+Object.assign(sun.shadow.camera,{left:-N,right:N,top:N,bottom:-N,near:1,far:50});sun.shadow.mapSize.set(2048,2048);scene.add(sun);
 
 const mat=(col,o={})=>new THREE.MeshPhongMaterial(Object.assign({color:col,flatShading:true,shininess:6,specular:0x1a1a1a},o));
-const cellPos=(c,r,y=0)=>new THREE.Vector3(c-3.5,(isStruct(c,r)?0.5:0)+y,r-3.5);
+const cellPos=(c,r,y=0)=>new THREE.Vector3(c-OFF,(isStruct(c,r)?0.5:0)+y,r-OFF);
 const boardG=new THREE.Group();scene.add(boardG);
 const tiles=[];
 (function buildBoard(){
-  const slab=new THREE.Mesh(new THREE.BoxGeometry(8.7,0.4,8.7),mat(0x1d2131));slab.position.y=-0.4;slab.receiveShadow=true;boardG.add(slab);
+  const slab=new THREE.Mesh(new THREE.BoxGeometry(N+.7,0.4,N+.7),mat(0x1d2131));slab.position.y=-0.4;slab.receiveShadow=true;boardG.add(slab);
   for(let r=0;r<N;r++)for(let c=0;c<N;c++){
     const ctr=CENTER.some(([a,b])=>a===c&&b===r), even=(c+r)%2===0;
     const t=new THREE.Mesh(new THREE.BoxGeometry(0.96,0.2,0.96),mat(ctr?(even?0x3f4763:0x394059):(even?0x2c3246:0x262b3d)));
-    t.position.set(c-3.5,-0.1,r-3.5);t.receiveShadow=true;t.userData={c,r};boardG.add(t);tiles.push(t);
+    t.position.set(c-OFF,-0.1,r-OFF);t.receiveShadow=true;t.userData={c,r};boardG.add(t);tiles.push(t);
     if(isStruct(c,r)){
-      const s=new THREE.Mesh(new THREE.BoxGeometry(0.96,0.5,0.96),mat(0x424a66));s.position.set(c-3.5,0.25,r-3.5);s.castShadow=s.receiveShadow=true;s.userData={c,r};boardG.add(s);tiles.push(s);
-      const cap=new THREE.Mesh(new THREE.BoxGeometry(0.74,0.06,0.74),mat(0x59628a));cap.position.set(c-3.5,0.5,r-3.5);cap.receiveShadow=true;boardG.add(cap);
+      const s=new THREE.Mesh(new THREE.BoxGeometry(0.96,0.5,0.96),mat(0x424a66));s.position.set(c-OFF,0.25,r-OFF);s.castShadow=s.receiveShadow=true;s.userData={c,r};boardG.add(s);tiles.push(s);
+      const cap=new THREE.Mesh(new THREE.BoxGeometry(0.74,0.06,0.74),mat(0x59628a));cap.position.set(c-OFF,0.5,r-OFF);cap.receiveShadow=true;boardG.add(cap);
     }
   }
   // repères de camp
-  for(const [team,col] of [[0,0xf1f3f9],[1,0x505570]]){SPAWN[team].forEach(([c,r])=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,0.02,6),mat(col));m.position.set(c-3.5,0.01,r-3.5);boardG.add(m)})}
+  for(const [team,col] of [[0,0xf1f3f9],[1,0x505570]]){SPAWN[team].forEach(([c,r])=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.16,0.02,6),mat(col));m.position.set(c-OFF,0.01,r-OFF);boardG.add(m)})}
 })();
 // surbrillances de cases
 const hlMeshes={};
 for(let r=0;r<N;r++)for(let c=0;c<N;c++){
   const m=new THREE.Mesh(new THREE.PlaneGeometry(0.86,0.86),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false}));
-  m.rotation.x=-Math.PI/2;m.position.set(c-3.5,(isStruct(c,r)?0.53:0.02),r-3.5);scene.add(m);hlMeshes[KEY(c,r)]=m}
+  m.rotation.x=-Math.PI/2;m.position.set(c-OFF,(isStruct(c,r)?0.53:0.02),r-OFF);scene.add(m);hlMeshes[KEY(c,r)]=m}
 const HLC={rngA:[0xff4d4d,.14],rngB:[0xb26bff,.16],move:[0x4aa3ff,.5],atk:[0xff4d4d,.55],abl:[0xb26bff,.55],ally:[0x3ee08a,.55],place:[0xffd24a,.5]};
 function paintHL(){const pl=.8+.2*Math.sin(performance.now()/220);for(const k in hlMeshes){const t=G.pv.hl.get(k)||G.hl.get(k),m=hlMeshes[k].material;if(t){m.color.setHex(HLC[t][0]);m.opacity=HLC[t][1]*pl}else m.opacity=0}}
 // curseur + anneau de sélection
@@ -623,10 +655,10 @@ const feet=u=>u.mesh.position.clone().setY(u.mesh.position.y+.08),chest=u=>u.mes
 function faceTo(u,t){const dx=t.c-u.c,dz=t.r-u.r;if(dx||dz)u.faceY=Math.atan2(dx,dz)}
 function hop(u,h=.25,dur=.28){return tween(dur,k=>{u.mesh.userData.body.position.y=Math.sin(k*Math.PI)*h;u.squash=-.15*Math.sin(k*Math.PI)})}
 function stepTweens(dt){for(let i=tweens.length-1;i>=0;i--){const w=tweens[i];w.t+=dt;const k=Math.min(1,w.t/w.dur);w.fn(k);if(k>=1){tweens.splice(i,1);w.res()}}}
-async function walk(u,path){for(const [c,r] of path){const a=u.mesh.position.clone(),b=cellPos(c,r);faceTo(u,{c,r});
+async function walk(u,path){for(const [c,r] of path){const a=u.mesh.position.clone(),b=cellPos(c,r);camFocus([b],{min:.8});faceTo(u,{c,r});
     await tween(.15,k=>{u.mesh.position.lerpVectors(a,b,k);u.mesh.position.y+=Math.sin(k*Math.PI)*.24;u.squash=-.2*Math.sin(k*Math.PI)});
     u.c=c;u.r=r;u.squash=.3;burst(feet(u),0x9aa3c0,4,{speed:.9,up:.7,size:.07,life:.4,g:4})}}
-async function teleport(u,cell){burst(chest(u),0xb7a0ff,14,{speed:1.6,up:2.4,g:1});ringFx(u.mesh.position,0xb7a0ff,1.2);
+async function teleport(u,cell){camFocus([u,cell],{min:.68});burst(chest(u),0xb7a0ff,14,{speed:1.6,up:2.4,g:1});ringFx(u.mesh.position,0xb7a0ff,1.2);
   await tween(.16,k=>{u.mesh.scale.set(1-k,1+k*.8,1-k)});u.c=cell.c;u.r=cell.r;u.mesh.position.copy(cellPos(cell.c,cell.r));
   burst(chest(u),0xb7a0ff,14,{speed:1.6,up:2.4,g:1});ringFx(u.mesh.position,0xb7a0ff,1.2);
   await tween(.2,k=>{const e=ease.bounce(k);u.mesh.scale.set(e,2-e,e)});u.mesh.scale.setScalar(1);u.squash=.2;
@@ -656,12 +688,12 @@ async function addEff(t,type,src){
   const ps=t.d.ab;if(ps.passive&&ps.immune&&ps.immune.includes(type)){pop(t,'Immunisé','#9cf');log(`${t.d.name} est immunisé (${EFF[type][1]})`);ringFx(t.mesh.position,0x9cf0ff,1.1,.35);return}
   if(t.effect&&t.effect.src!==src.id){pop(t,'Déjà affecté','#aaa');log(`${t.d.name} a déjà un effet`);return}
   t.effect={type,src:src.id,left:type==='toxic'?2:1};burst(chest(t),FXCOL[type],14,{speed:1.4,up:2.4,g:-.5,life:.8});ringFx(t.mesh.position,FXCOL[type],1.2,.5);t.squash=.3;pop(t,EFF[type][0]+' '+EFF[type][1],'#ffd27a');log(`${t.d.name} : ${EFF[type][0]} ${EFF[type][1]}`);refresh();await sleep(250)}
-async function dmg(t,n,src,fromCombat=false){
+async function dmg(t,n,src,fromCombat=false){camFocus([t],{min:.66});
   if(!t.alive)return false;
   if(sub(t)==='Juggernaut'&&t.hp===4&&!fromCombat){pop(t,'Résiste','#9cf');log(`${t.d.name} (Juggernaut) ignore ce dégât : 1er PV uniquement par combat`);return false}
   t.hp=Math.max(0,t.hp-n);pop(t,'−'+n,'#ff6b6b');log(`${t.d.name} perd ${n} PV (${t.hp}/4)`);shake(t);impact(t,n>1||t.hp<=0);refresh();await sleep(280);
   if(t.hp<=0)await ko(t,src);return true}
-async function ko(t,src){t.alive=false;log(`<b>${t.d.name} est K.O. !</b>`);pop(t,'K.O.','#ff6b6b');
+async function ko(t,src){camFocus([t,src&&src.mesh?src:null],{min:.6});camPunch(1500,.92,.82);t.alive=false;log(`<b>${t.d.name} est K.O. !</b>`);pop(t,'K.O.','#ff6b6b');
   G.units.forEach(x=>x.buffs=x.buffs.filter(b=>b.src!==t.id||b.until==='self'));
   hitStop(.15);shakeCam(.7);burst(chest(t),CLS[t.d.cls].h,26,{speed:3.6,up:3.6,size:.16,life:.9});burst(chest(t),0xffffff,10,{speed:2,up:3});ringFx(t.mesh.position,0xffffff,2,.6);
   const y0=t.mesh.position.y;await tween(.6,k=>{t.mesh.rotation.y=t.faceY+k*12;t.mesh.position.y=y0+Math.sin(k*Math.PI)*.6;t.mesh.scale.setScalar(1-ease.out(k))});t.mesh.visible=false;
@@ -682,7 +714,7 @@ async function collectToken(u){tutoEv('token');burst(cellPos(u.c,u.r,.5),0xffc93
 const zoneGroup=new THREE.Group();scene.add(zoneGroup);
 function syncZones(){while(zoneGroup.children.length)zoneGroup.remove(zoneGroup.children[0]);
   for(const z of G.zones)for(const k of z.keys){const[c,r]=k.split(',').map(Number),m=new THREE.Mesh(new THREE.PlaneGeometry(.92,.92).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:ZK[z.kind].col,transparent:true,opacity:.4,depthWrite:false}));
-    m.position.set(c-3.5,(isStruct(c,r)?0.55:0.045),r-3.5);m.userData.z=z;zoneGroup.add(m)}}
+    m.position.set(c-OFF,(isStruct(c,r)?0.55:0.045),r-OFF);m.userData.z=z;zoneGroup.add(m)}}
 async function applyZone(z,u){if(z.hit.has(u.id))return;const K=ZK[z.kind];if(K.ally?u.team!==z.team:u.team===z.team)return;z.hit.add(u.id);
   pop(u,K.ic+' '+K.n,'#ffd27a');
   if(K.heal){heal(u,K.heal)}else{if(K.eff)await addEff(u,K.eff,{id:z.src.id,team:z.team});if(K.dmg&&u.alive)await dmg(u,K.dmg,z.src)}}
@@ -755,6 +787,7 @@ async function combat(att,def){
   if(th&&def.alive&&att.alive){const r=d6();pop(def,`Piques d6 : ${r}`,'#ffb42e');log(`${def.d.name} (passif ${def.d.ab.n}) : d6 = <span class="r">${r}</span>`);if(r>=th)await dmg(att,1,def)}
   return res}
 async function combat0(att,def){
+  camFocus([att,def],{min:.62});
   let A=rollSet(stat(att,'atk')),D=rollSet(stat(def,'def'));
   if(sub(att)==='Brawler'&&att.flags.rerollAtk){att.flags.rerollAtk=false;if(A[0]<=3){const o=A[0];A[0]=d6();log(`Brawler relance son d6 (${o} → ${A[0]})`)}}
   const sa=sum(A),sd=sum(D);
@@ -770,10 +803,10 @@ async function combat0(att,def){
   if(sub(att)==='Protector')await dmg(def,1,att,true);else if(sub(def)==='Protector')await dmg(att,1,def,true);return'tie'}
 
 /* ============ TOURS ============ */
-function beginRound(){G.round++;G.chain=[0,0];netChk();G.turnPlayer=(G.round-1)%2;G.units.forEach(u=>u.played=false);G.sel=null;G.mode='idle';
+function beginRound(){camOverview();G.round++;G.chain=[0,0];netChk();G.turnPlayer=(G.round-1)%2;G.units.forEach(u=>u.played=false);G.sel=null;G.mode='idle';
   log(`<span class="r">— Manche ${G.round} —</span> ${TEAMS[G.turnPlayer]} commencent`);focusNext();refresh()}
-function focusNext(){const u=alive(G.turnPlayer).find(x=>!x.played);if(u)G.cur={c:u.c,r:u.r}}
-function selectUnit(u){netLog({k:'sel',id:u.id});tutoEv('sel',u.d.num);hop(u,.3,.32);ringFx(u.mesh.position,0xffb42e,1.1,.4);G.sel=u;G.committed=false;G.used={move:false,atk:false,abl:false,card:false};
+function focusNext(){const u=alive(G.turnPlayer).find(x=>!x.played);if(u){G.cur={c:u.c,r:u.r};if(G.phase==='play'&&ctl(G.turnPlayer))camFocus([u])}}
+function selectUnit(u){camFocus([u]);netLog({k:'sel',id:u.id});tutoEv('sel',u.d.num);hop(u,.3,.32);ringFx(u.mesh.position,0xffb42e,1.1,.4);G.sel=u;G.committed=false;G.used={move:false,atk:false,abl:false,card:false};
   G.actions=(u.effect&&u.effect.type==='stun')?1:2;G.mode=(u.effect&&u.effect.type==='frozen')?'frozen':'sel';
   if(G.actions===1)toast('Assommé : une seule action ce tour');recalc();refresh()}
 function commit(){if(G.committed)return;G.committed=true;const u=G.sel;u.buffs=u.buffs.filter(b=>!(b.until==='turn'&&b.src===u.id))}
@@ -829,7 +862,7 @@ async function doMove(dest){netLog({k:'move',c:dest.c,r:dest.r});tutoEv('move');
 async function doAttack(t,solo){netLog({k:'atk',t:t.id,solo:!!solo});const u=G.sel;G.busy=true;commit();G.hl=new Map();paintHL();
   if(u.freeAtk>0)u.freeAtk--;else{G.actions--;G.used.atk=true}
   if(solo)G.actions=0;await combat(u,t);await after()}
-async function doAbility(isUlt,tg){const u=G.sel,s=isUlt?u.d.ul:u.d.ab;netLog({k:'abl',u:!!isUlt,t:serTarget(s,tg)});tutoEv(isUlt?'ult':'abl');G.busy=true;commit();G.hl=new Map();paintHL();
+async function doAbility(isUlt,tg){const u=G.sel,s=isUlt?u.d.ul:u.d.ab;camFocus(tgPoints(u,tg),{min:.6});if(isUlt)camPunch(1800,.95,.9);netLog({k:'abl',u:!!isUlt,t:serTarget(s,tg)});tutoEv(isUlt?'ult':'abl');G.busy=true;commit();G.hl=new Map();paintHL();
   G.actions--;G.used.abl=true;if(isUlt)G.ult[u.team]=true;
   log(`<b>${u.d.name}</b> utilise ${isUlt?'l\'ultime ':''}<span class="r">${s.n}</span>`);pop(u,s.n,'#d9b8ff');
   await s.run(u,tg);G.chain[u.team]++;await sleep(200);if(G.phase==='over')return;await after()}
@@ -904,7 +937,7 @@ function renderTop(){
       :`${s.n} : <b style="color:#c48cff">${G.tcount} ${who}</b> · `+(s.t==='none'?'<kbd>Entrée</kbd> pour lancer':'<kbd>Entrée</kbd> sur une cible')+' · <kbd>Échap</kbd> annuler'}
   else if(m==='heal')t=`<b style="color:#3ee08a">${G.tcount} allié${G.tcount>1?'s':''} à soigner</b> (vert) · <kbd>Entrée</kbd> soigner · <kbd>Échap</kbd> annuler`;
   else if(m==='card')t='<kbd>↑↓</kbd> choisir · <kbd>Entrée</kbd> jouer · <kbd>Échap</kbd> annuler';
-  h.innerHTML=t+netChip();bindQuit()}
+  h.innerHTML=(G.mobile&&G.phase==='play'?mobHint():t)+netChip();bindQuit()}
 const isReady=u=>G.phase==='play'&&u.alive&&u.team===G.turnPlayer&&!u.played&&ctl(u.team);
 function ucHTML(u){return`<div class="uc ${G.sel===u?'sel':''} ${isReady(u)?'ready':''} ${u.played&&u.alive?'played':''} ${u.alive?'':'dead'}" data-id="${u.id}" style="--cc:${CLS[u.d.cls].c}">
   <div class="nm">${u.d.name}${u.effect?` <span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span>`:''}<small>${u.d.sub}</small></div><div class="hp">${hearts(u)}</div>
@@ -917,12 +950,13 @@ function renderFxRef(){const el=$('#fxref');if(!el)return;const on=k=>G.units.fi
    +`<div class="fxr"><i>▦</i><span><b>Zones</b></span><span>Effet sur qui y entre ou y reste en fin de manche.</span></div>`
    +`<div class="fxr"><i>ℹ️</i><span><b>Règles</b></span><span>1 effet max par personnage ; ils se dissipent après son prochain tour.</span></div>`;
   el.innerHTML=`<div class="fxr-h" id="fxh"><span>Effets</span><kbd>I</kbd></div>`+rows;$('#fxh').onclick=()=>el.classList.toggle('min');
-  el.style.display=inMenus()?'none':'block'}
+  el.style.display=inMenus()?'none':''}
 function renderRosters(){renderFxRef();[0,1].forEach(t=>{const us=G.units.filter(u=>u.team===t);
   $(t?'#rosterB':'#rosterW').innerHTML=`<div class="rh"><b>${TEAMS[t]}</b><span>Renforts : ${G.hand[t].length} · Ult ${G.ult[t]?'✖':'✔'}</span></div>`+us.map(ucHTML).join('')})
   document.querySelectorAll('.uc').forEach(el=>el.onclick=()=>{const u=G.units.find(x=>x.id==el.dataset.id);if(!u)return;G.cur={c:u.c,r:u.r};if(G.phase==='play'&&!G.busy&&G.mode==='idle')confirmAct()})}
 function renderDock(){
   const insp=G.sel||(G.phase==='play'?unitAt(G.cur.c,G.cur.r):null),info=$('#info'),acts=$('#acts'),pips=$('#pips'),cards=$('#cards');
+  if(G.mobile){renderDockMobile(insp);return}
   if(!insp){info.innerHTML=G.phase==='place'?'<div class="abil">Place tes 4 personnages sur les cases de départ de ton camp.</div>':'<div class="abil">Déplace le curseur sur un personnage pour voir ses stats.</div>';acts.innerHTML='';pips.innerHTML='';cards.innerHTML='';return}
   const u=insp,d=u.d;
   info.innerHTML=`<h3 style="--cc:${CLS[d.cls].c}">${d.name}${u.effect?` <span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span>`:''}<span class="chip">${CLS[d.cls].n} · ${d.sub}</span><span style="color:var(--mut);font-weight:500;font-size:12px">${TEAMS[u.team]} · ${hearts(u)} ${u.effect?EFF[u.effect.type][0]+' '+EFF[u.effect.type][1]:''}</span></h3>
@@ -940,10 +974,10 @@ function renderDock(){
 function renderBadges(){const el=$('#badges');let h='';for(const u of G.units){if(!u.alive||!u.mesh.visible)continue;const[x,y]=screenOf(u.mesh.position,1.35);
   const tm=G.pv.mark.get(u.id)||(G.tmark&&G.tmark.get(u.id)),tag=tm&&tm!=='hint'?`<div class="tg ${tm}">${tm==='atk'?'⚔ Attaquable':tm==='ally'?'✚ Allié concerné':tm==='warn'?'⚠ Allié touché':'✦ Ennemi concerné'}</div>`:'';
   h+=`<div class="badge t${u.team}" style="left:${x}px;top:${y}px">${tag}<div class="hp">${hearts(u)}</div><span class="nm">${u.effect?`<span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span> `:''}${u.timers.length?`<span class="fxi">${timerIcon(u)}</span> `:''}${u.d.name}</span></div>`}
-  for(const z of G.zones){const ks=[...z.keys].map(k=>k.split(',').map(Number)),cx=ks.reduce((a,b)=>a+b[0],0)/ks.length,cz=ks.reduce((a,b)=>a+b[1],0)/ks.length,[x,y]=screenOf(new THREE.Vector3(cx-3.5,.3,cz-3.5));
+  for(const z of G.zones){const ks=[...z.keys].map(k=>k.split(',').map(Number)),cx=ks.reduce((a,b)=>a+b[0],0)/ks.length,cz=ks.reduce((a,b)=>a+b[1],0)/ks.length,[x,y]=screenOf(new THREE.Vector3(cx-OFF,.3,cz-OFF));
     h+=`<div class="zb" style="left:${x}px;top:${y}px;color:#${ZK[z.kind].col.toString(16).padStart(6,'0')}">${ZK[z.kind].ic} ${z.ttl}</div>`}
   if(el._h!==h){el.innerHTML=h;el._h=h}}
-function renderKeys(){const K=[['←↑↓→ / WASD','Curseur'],['Entrée / Espace','Valider'],['Tab','Perso suivant'],['1','Déplacer'],['2','Attaquer'],['3','Capacité'],['4','Ultime (manche 2+)'],['5','Carte renfort'],['6','Soigner (Soutien)'],['E','Fin de tour'],['Échap','Annuler'],['V','Vue plongeante/inclinée'],['[ ]','Tourner la caméra'],['0','Recentrer'],['Clic droit + glisser','Orbiter'],['Molette','Zoom'],['Maj/Molette + glisser','Déplacer'],['+ / −','Zoom'],['I','Rappel des effets'],['H','Masquer l\'aide']];
+function renderKeys(){const K=[['←↑↓→ / WASD','Curseur'],['Entrée / Espace','Valider'],['Tab','Perso suivant'],['1','Déplacer'],['2','Attaquer'],['3','Capacité'],['4','Ultime (manche 2+)'],['5','Carte renfort'],['6','Soigner (Soutien)'],['E','Fin de tour'],['Échap','Annuler'],['V','Vue plongeante/inclinée'],['[ ]','Tourner la caméra'],['0','Recentrer'],['C','Caméra automatique'],['Clic droit + glisser','Orbiter'],['Molette','Zoom'],['Maj/Molette + glisser','Déplacer'],['+ / −','Zoom'],['I','Rappel des effets'],['M','Mode mobile / PC'],['H','Masquer l\'aide']];
   $('#keys').innerHTML='<div class="kh"><span>Contrôles</span><kbd>H</kbd></div>'+K.map(([k,t])=>`<kbd>${k}</kbd><span>${t}</span>`).join('')}
 
 /* ============ MENU, SÉLECTION & PLACEMENT ============ */
@@ -954,8 +988,9 @@ function showMenu(){const ov=$('#overlay');ov.className='on';
   const M=[['Tutoriel','Apprends les bases en jouant une partie guidée contre des pions inoffensifs. Recommandé pour commencer.'],['Deux joueurs','Blancs et Noirs jouent chacun leur tour sur le même clavier.'],['Contre le bot','Tu joues les Blancs. Le bot (niveau facile) joue les Noirs : il hésite, se trompe et attaque sans stratégie.'],['En ligne','Crée un salon protégé par mot de passe ou rejoins celui d\'un ami. Chacun joue depuis son écran.']];
   ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> Arena</h1><p>Duel tactique au tour par tour. Chaque camp compose une équipe de 4 personnages, un par classe. Les Blancs ont un socle rond, les Noirs un socle carré.</p>
    <div class="modes">${M.map((m,i)=>`<div class="mode ${G.menuSel===i?'sel':''}" data-m="${i}"><h2><kbd>${i+1}</kbd> ${m[0]}${i===0?' <span class="chip" style="--cc:var(--amber)">conseillé</span>':''}</h2><p>${m[1]}</p></div>`).join('')}</div>
-   <div class="ovbar"><span><kbd>←</kbd> <kbd>→</kbd> choisir</span><span><kbd>Entrée</kbd> continuer</span><span><kbd>B</kbd> Variante avancée : <b style="color:var(--amber)">${G.variant?'ACTIVE':'désactivée'}</b></span><span><kbd>L</kbd> Équilibrage des équipes : <b style="color:var(--amber)">${BUDGETS.find(b=>b[0]===G.budget)[1]}</b></span></div><p style="margin-top:10px">Chaque personnage vaut de 1 à 5 étoiles. Le total d'étoiles d'une équipe ne peut pas dépasser la limite : les deux camps ont le même budget.</p></div>`;
-  ov.querySelectorAll('.mode').forEach(el=>el.onclick=()=>{G.menuSel=+el.dataset.m;menuGo()})}
+   <div class="ovbar"><span><kbd>←</kbd> <kbd>→</kbd> choisir</span><span><kbd>Entrée</kbd> continuer</span><button class="btn" id="mVar"><kbd>B</kbd> Variante avancée : <b>${G.variant?'ACTIVE':'désactivée'}</b></button><button class="btn" id="mBud"><kbd>L</kbd> Équilibrage : <b>${BUDGETS.find(b=>b[0]===G.budget)[1]}</b></button><button class="btn" id="mMob"><kbd>M</kbd> ${G.mobile?'🖥 Mode PC':'📱 Mode mobile'}</button></div><p style="margin-top:10px">Chaque personnage vaut de 1 à 5 étoiles. Le total d'étoiles d'une équipe ne peut pas dépasser la limite : les deux camps ont le même budget.</p></div>`;
+  ov.querySelectorAll('.mode').forEach(el=>el.onclick=()=>{G.menuSel=+el.dataset.m;menuGo()});
+  $('#mVar').onclick=()=>{G.variant=!G.variant;showMenu()};$('#mBud').onclick=()=>{const i=BUDGETS.findIndex(b=>b[0]===G.budget);G.budget=BUDGETS[(i+1)%BUDGETS.length][0];showMenu()};$('#mMob').onclick=()=>setMobile(!G.mobile)}
 function menuGo(){G.lastMode=G.menuSel;if(G.menuSel===0){startTuto();return}if(G.menuSel===3){netHome();return}G.online=false;G.tuto=null;G.bot=G.menuSel===2;startPick()}
 function startPick(){G.phase='pick';G.pickTeam=0;G.ptab='A';G.pidx=0;G.picks=[[],[]];showPick();refresh()}
 const BUDGETS=[[99,'Libre'],[16,'Large · 16 ★'],[14,'Standard · 14 ★'],[12,'Strict · 12 ★']];
@@ -1003,7 +1038,7 @@ function pickKey(k,e){if(G.online){if(NET.confirmed)return;if(k==='escape'){G.ph
   else if(k==='backspace'||k==='delete'){G.picks[G.pickTeam]=G.picks[G.pickTeam].filter(x=>x.cls!==G.ptab)}
   else if(k==='r'){pickRandom();return}else if(k==='c'){pickConfirm();return}else return;
   showPick()}
-function startPlacement(){G.phase='place';G.pl=0;const t=0;G.cur={c:SPAWN[t][0][0],r:SPAWN[t][0][1]};recalc();refresh();log('Placement : choisis la case de départ de chaque personnage')}
+function startPlacement(){camOverview();G.phase='place';G.pl=0;const t=0;G.cur={c:SPAWN[t][0][0],r:SPAWN[t][0][1]};recalc();refresh();log('Placement : choisis la case de départ de chaque personnage')}
 function placeHere(c,r){if(G.hl.get(KEY(c,r))!=='place'){toast('Choisis une case jaune');return}
   if(G.online&&!NET.replaying&&G.pl%2!==G.myTeam){toast('Ce n\'est pas ton placement');return}
   netLog({k:'place',c,r});
@@ -1095,6 +1130,10 @@ async function confirmAct(){
       toast(`${G.multi.length}/${s.k} cibles · Entrée sur une cible déjà choisie pour lancer`);recalc();refresh();return}
     if(s.t==='cell'){if(h)return doAbility(isU,{c,r})}else if(t&&h)return doAbility(isU,t)}
   toast('Cible ou case invalide')}
+function nextUnit(){if(G.phase!=='play'||G.busy||locked())return;const list=alive(G.turnPlayer).filter(u=>!u.played);if(!list.length)return;
+  if(G.sel&&G.committed){toast('Termine d\'abord le tour de '+G.sel.d.name);return}
+  const cur=list.findIndex(u=>u.c===G.cur.c&&u.r===G.cur.r),n=list[(cur+1)%list.length];G.cur={c:n.c,r:n.r};
+  if(G.sel){selectUnit(n);autoEndIfStuck()}else refresh()}
 const MOVE={arrowup:[0,-1],w:[0,-1],arrowdown:[0,1],s:[0,1],arrowleft:[-1,0],a:[-1,0],arrowright:[1,0],d:[1,0],z:[0,-1],q:[-1,0]};
 function cancel(){if(G.busy||G.phase!=='play'||locked())return;if(G.mode==='sel'&&!G.committed&&G.sel){G.sel=null;G.mode='idle';recalc();refresh()}else if(['move','atk','abl','ult','card','heal'].includes(G.mode)){G.multi=[];G.mode='sel';recalc();refresh()}}
 addEventListener('keydown',e=>{
@@ -1106,6 +1145,7 @@ addEventListener('keydown',e=>{
     else if(k==='arrowright'||k==='arrowdown'||k==='d'||k==='s'){G.menuSel=(G.menuSel+1)%4;showMenu()}
     else if(k==='1'||k==='2'||k==='3'||k==='4'){G.menuSel=+k-1;menuGo()}
     else if(k==='enter'||k===' ')menuGo();
+    else if(k==='m'){setMobile(!G.mobile)}
     else if(k==='b'){G.variant=!G.variant;showMenu()}
     else if(k==='l'){const i=BUDGETS.findIndex(b=>b[0]===G.budget);G.budget=BUDGETS[(i+1)%BUDGETS.length][0];showMenu()}
     return}
@@ -1120,7 +1160,9 @@ addEventListener('keydown',e=>{
   if(k==='0'){Object.assign(CAMT,CAMHOME);CAMT.yaw=Math.round(CAMC.yaw/(2*Math.PI))*2*Math.PI;return}
   if(k==='h'){$('#keys').classList.toggle('min');return}
   if(k==='n'&&G.tuto&&!G.tuto.done&&TUTO[G.tuto.i].info){tutoNext();return}
-  if(k==='i'){$('#fxref').classList.toggle('min');return}
+  if(k==='i'){$('#fxref').classList.toggle(G.mobile?'open':'min');return}
+  if(k==='c'&&G.phase!=='pick'){setFollow(!G.camFollow);return}
+  if(k==='m'&&G.phase!=='pick'){setMobile(!G.mobile);return}
   if(G.phase==='place'&&k==='x'&&!G.online){autoPlace();return}
   if(G.busy)return;
   if(locked()&&!MOVE[k])return;
@@ -1132,22 +1174,37 @@ addEventListener('keydown',e=>{
   if(k==='enter'||k===' '){confirmAct();return}
   if(k==='escape'||k==='backspace'){cancel();return}
   if(G.phase!=='play')return;
-  if(k==='tab'){const list=alive(G.turnPlayer).filter(u=>!u.played);if(!list.length)return;
-    if(G.sel&&G.committed){toast('Termine d\'abord le tour de '+G.sel.d.name);return}
-    const cur=list.findIndex(u=>u.c===G.cur.c&&u.r===G.cur.r),n=list[(cur+1)%list.length];G.cur={c:n.c,r:n.r};
-    if(G.sel){selectUnit(n);autoEndIfStuck()}else refresh();return}
+  if(k==='tab'){nextUnit();return}
   const cmd={'1':'move','2':'atk','3':'abl','4':'ult','5':'card','6':'heal',e:'end',f:'thaw'}[k];if(cmd)command(cmd)});
 
 // souris
 const ray=new THREE.Raycaster(),mp=new THREE.Vector2();
 function pick(ev){const r=canvas.getBoundingClientRect();mp.set((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1);ray.setFromCamera(mp,cam);const h=ray.intersectObjects(tiles)[0];return h&&h.object.userData}
-canvas.addEventListener('pointermove',ev=>{if(inMenus()||G.busy)return;const p=pick(ev);if(p&&(p.c!==G.cur.c||p.r!==G.cur.r)){G.cur={c:p.c,r:p.r};refreshPreview();renderDock()}});
-canvas.addEventListener('click',ev=>{if(inMenus()||ev.shiftKey)return;const p=pick(ev);if(p){G.cur={c:p.c,r:p.r};confirmAct()}});
+canvas.addEventListener('pointermove',ev=>{if(ev.pointerType==='touch'||inMenus()||G.busy)return;const p=pick(ev);if(p&&(p.c!==G.cur.c||p.r!==G.cur.r)){G.cur={c:p.c,r:p.r};refreshPreview();renderDock()}});
+let dragMoved=false;
+canvas.addEventListener('click',ev=>{if(inMenus()||ev.shiftKey)return;if(dragMoved){dragMoved=false;return}
+  const p=pick(ev);if(!p)return;const same=p.c===G.cur.c&&p.r===G.cur.r;G.cur={c:p.c,r:p.r};
+  if(G.mobile&&!same&&G.phase==='play'&&(G.mode==='abl'||G.mode==='ult')){const s=G.mode==='abl'?G.sel.d.ab:G.sel.d.ul;if(s.t==='line'||s.t==='zone'){refreshPreview();renderDock();return}}
+  confirmAct()});
+/* gestes tactiles : 1 doigt = tourner/incliner, 2 doigts = zoom + déplacer, tap = choisir */
+const touches=new Map();let pinch=null;
+canvas.style.touchAction='none';
+canvas.addEventListener('pointerdown',ev=>{if(ev.pointerType!=='touch')return;touches.set(ev.pointerId,{x:ev.clientX,y:ev.clientY,sx:ev.clientX,sy:ev.clientY});dragMoved=false;try{canvas.setPointerCapture(ev.pointerId)}catch(e){}
+  if(touches.size===2){const[a,b]=[...touches.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),mx:(a.x+b.x)/2,my:(a.y+b.y)/2}}});
+canvas.addEventListener('pointermove',ev=>{if(ev.pointerType!=='touch'||!touches.has(ev.pointerId))return;const t=touches.get(ev.pointerId),dx=ev.clientX-t.x,dy=ev.clientY-t.y;t.x=ev.clientX;t.y=ev.clientY;
+  if(Math.hypot(t.x-t.sx,t.y-t.sy)>10)dragMoved=true;if(!dragMoved)return;
+  if(touches.size===1){CAMT.yaw-=dx*.008;CAMT.pitch=Math.max(.6,Math.min(1.5,CAMT.pitch+dy*.006))}
+  else if(touches.size===2&&pinch){const[a,b]=[...touches.values()],d=Math.hypot(a.x-b.x,a.y-b.y),mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+    CAMT.zoom=Math.max(.45,Math.min(1.8,CAMT.zoom*pinch.d/Math.max(20,d)));
+    const sc=baseHH*CAMT.zoom*2/innerHeight,c=Math.cos(CAMT.yaw),n=Math.sin(CAMT.yaw),ddx=mx-pinch.mx,ddy=my-pinch.my;
+    CAMT.px=Math.max(-PB,Math.min(PB,CAMT.px-(ddx*c+ddy*n)*sc));CAMT.pz=Math.max(-PB,Math.min(PB,CAMT.pz+(ddx*n-ddy*c)*sc));pinch={d,mx,my}}});
+const endTouch=ev=>{if(ev.pointerType!=='touch')return;touches.delete(ev.pointerId);if(touches.size<2)pinch=null};
+canvas.addEventListener('pointerup',endTouch);canvas.addEventListener('pointercancel',endTouch);
 canvas.addEventListener('contextmenu',ev=>ev.preventDefault());
 let drag=null;
 canvas.addEventListener('pointerdown',ev=>{if(ev.button===2||ev.button===1||(ev.button===0&&ev.shiftKey)){drag={b:ev.button,x:ev.clientX,y:ev.clientY,moved:0,pan:ev.button===1||ev.shiftKey};canvas.setPointerCapture(ev.pointerId);ev.preventDefault()}});
 canvas.addEventListener('pointermove',ev=>{if(!drag)return;const dx=ev.clientX-drag.x,dy=ev.clientY-drag.y;drag.x=ev.clientX;drag.y=ev.clientY;drag.moved+=Math.abs(dx)+Math.abs(dy);
-  if(drag.pan){const s=baseHH*CAMT.zoom*2/innerHeight,c=Math.cos(CAMT.yaw),n=Math.sin(CAMT.yaw);CAMT.px=Math.max(-6,Math.min(6,CAMT.px-(dx*c+dy*n)*s));CAMT.pz=Math.max(-6,Math.min(6,CAMT.pz+(dx*n-dy*c)*s))}
+  if(drag.pan){const s=baseHH*CAMT.zoom*2/innerHeight,c=Math.cos(CAMT.yaw),n=Math.sin(CAMT.yaw);CAMT.px=Math.max(-PB,Math.min(PB,CAMT.px-(dx*c+dy*n)*s));CAMT.pz=Math.max(-PB,Math.min(PB,CAMT.pz+(dx*n-dy*c)*s))}
   else{CAMT.yaw-=dx*.006;CAMT.pitch=Math.max(.6,Math.min(1.5,CAMT.pitch+dy*.005))}});
 canvas.addEventListener('pointerup',ev=>{if(drag&&drag.b===2&&drag.moved<5)cancel();drag=null});
 canvas.addEventListener('wheel',ev=>{ev.preventDefault();CAMT.zoom=Math.max(.45,Math.min(1.8,CAMT.zoom*Math.exp(ev.deltaY*.001)))},{passive:false});
@@ -1313,21 +1370,21 @@ const TUTO=[
  {info:1,t:'<b>Bienvenue dans New Era !</b> Les <b>Blancs</b> (socle <b>rond</b>) affrontent les <b>Noirs</b> (socle <b>carré</b>). Ton but : éliminer tous les pions noirs. Ici, les Noirs sont inoffensifs : ils passent leur tour.'},
  {info:1,t:'<b>La caméra.</b> Clic droit + glisser pour tourner, molette pour zoomer, <kbd>[</kbd> <kbd>]</kbd> pour pivoter, <kbd>V</kbd> pour l\'inclinaison, <kbd>0</kbd> pour recentrer. Essaie, puis continue.'},
  {t:'<b>Choisir un pion.</b> Un anneau vert marque ceux qui peuvent jouer. Déplace le curseur (<kbd>←↑↓→</kbd> ou WASD, ou la souris) sur <b>Zeus</b>, puis <kbd>Entrée</kbd>.',ok:f=>f.sel[1],focus:()=>unitByNum(1)},
- {t:'<b>Se déplacer.</b> Touche <kbd>1</kbd> : les cases bleues sont atteignables (HAB 3). Choisis-en une proche des ennemis puis <kbd>Entrée</kbd>. Un pion a <b>2 actions</b> par tour.',ok:f=>f.move},
+ {t:'<b>Se déplacer.</b> Touche <kbd>1</kbd> : les cases bleues sont atteignables (HAB 3). Va sur la case entourée (à 2 cases d\'un ennemi, et à 3 cases d\'Apollo) puis valide. Un pion a <b>2 actions</b> par tour.',ok:f=>f.move,focus:()=>({c:4,r:4})},
  {t:'<b>Attaquer.</b> Touche <kbd>2</kbd> : les ennemis en rouge sont à portée (PRE 2). Tu lances 1 d6 + des d3 (ATK) contre la défense adverse ; si tu fais plus, il perd 1 PV. Aucun ennemi en rouge ? Rapproche-toi d\'abord.',ok:f=>f.atk,focus:()=>unitByNum(25)},
  {info:1,t:'Le tour se termine <b>automatiquement</b> quand il n\'y a plus d\'action possible (ou avec <kbd>E</kbd>). Les tours alternent ensuite entre les camps : chaque pion joue une fois par <b>manche</b>.'},
  {t:'<b>Soigner.</b> Zeus est blessé ! Sélectionne <b>Apollo</b> (Soutien), touche <kbd>6</kbd> et choisis Zeus (en vert) : +1 PV.',enter:()=>{const z=unitByNum(1);if(z&&z.alive)z.hp=Math.min(z.hp,2);refresh()},ok:f=>f.heal,focus:()=>unitByNum(8)},
  {t:'<b>Capacité spéciale.</b> Apollo a une 2ᵉ action : touche <kbd>3</kbd> pour sa capacité (soigner jusqu\'à 2 alliés). Chaque personnage a une capacité et un ultime, décrits dans le bandeau du bas.',ok:f=>f.abl},
  {info:1,t:'<b>Nouvelle manche.</b> À partir de la manche 2, chaque camp peut lancer <b>un seul ultime</b> pour toute la partie. Les états (Brûlé, Gelé…) sont rappelés dans le panneau « Effets » (<kbd>I</kbd>).'},
  {t:'<b>L\'ultime.</b> Sélectionne <b>Zeus</b>, touche <kbd>4</kbd> puis valide : il frappe tous les ennemis proches.',ok:f=>f.ult,focus:()=>unitByNum(1)},
- {t:'<b>Renforts.</b> Le jeton doré donne une carte renfort à celui qui l\'atteint. Déplace Apollo sur la case dorée (<kbd>5</kbd> jouera ensuite une carte).',ok:f=>f.token,focus:()=>({c:4,r:4})},
+ {t:'<b>Renforts.</b> Le jeton doré donne une carte renfort à celui qui l\'atteint. Termine le tour de Zeus (<kbd>E</kbd>), puis déplace Apollo sur la case dorée (<kbd>5</kbd> jouera ensuite une carte).',ok:f=>f.token,focus:()=>({c:3,r:9})},
  {t:'<b>À toi de finir !</b> Élimine les deux pions noirs. Lignes, zones, bombes, combos… tout est détaillé dans les fiches. Bonne chance !',ok:()=>G.phase==='over'}
 ];
 function startTuto(){G.online=false;G.fast=false;resetGame();seedRng(4242);G.bot=true;G.variant=true;G.budget=99;G.tuto={i:0,f:{sel:{}},done:false};
   G.phase='play';$('#overlay').className='';CAMHOME.yaw=0;Object.assign(CAMT,CAMHOME);$('#keys').classList.add('min');
   const sp=(n,t,c,r)=>dropIn(spawnUnit(CHARS.find(x=>x.num===n),t,c,r));
-  sp(1,0,3,5);sp(8,0,4,6);sp(25,1,3,1);sp(15,1,6,1);
-  G.token={c:4,r:4};syncToken();beginRound();recalc();refresh()}
+  sp(1,0,4,7);sp(8,0,3,7);sp(25,1,4,2);sp(15,1,7,1);
+  G.token={c:3,r:9};syncToken();beginRound();camOverview();recalc();refresh()}
 function tutoEv(k,v){const T=G.tuto;if(!T||T.done)return;if(k==='sel')T.f.sel[v]=true;else T.f[k]=true;tutoCheck()}
 function tutoCheck(){const T=G.tuto;if(!T||T.done)return;const st=TUTO[T.i];if(st&&st.ok&&st.ok(T.f))tutoNext()}
 function tutoNext(){const T=G.tuto;if(!T||T.done)return;T.i++;
@@ -1340,6 +1397,74 @@ function renderCoach(){const el=$('#coach');if(!el)return;const T=G.tuto;
   el.innerHTML=`<div class="ch"><span>Tutoriel · étape ${T.i+1}/${n}</span><button class="btn" id="cSkip" style="font-size:11px;padding:2px 8px">Passer le tutoriel</button></div><div class="ct">${st.t}</div>
    <div class="cf">${st.info?`<button class="btn on" id="cNext"><kbd>N</kbd> Suivant</button>`:'<span>Fais l\'action demandée pour continuer.</span>'}</div><div class="bar"><i style="width:${Math.round(T.i/n*100)}%"></i></div>`;
   $('#cSkip').onclick=()=>startMenu();const nx=$('#cNext');if(nx)nx.onclick=tutoNext}
+
+
+
+/* ============ SUIVI DE CAMÉRA ============ */
+G.camFollow=(lsGet('ne_follow')!=='0');
+const clampF=(v,a,b)=>Math.max(a,Math.min(b,v));
+function ptOf(p){if(!p)return null;if(p.isVector3)return p;if(p.mesh)return p.mesh.position;if(p.c!==undefined)return cellPos(p.c,p.r);return null}
+/* cadre les points d'intérêt (persos qui jouent, cibles) : centre + zoom selon l'écart */
+function camFocus(pts,o={}){if(!G.camFollow||G.fast||inMenus())return;const P=pts.map(ptOf).filter(Boolean);if(!P.length)return;
+  let mx=0,mz=0;for(const q of P){mx+=q.x;mz+=q.z}mx/=P.length;mz/=P.length;
+  let span=0;for(const a of P)for(const b of P)span=Math.max(span,Math.hypot(a.x-b.x,a.z-b.z));
+  CAMT.px=clampF(mx,-PB,PB);CAMT.pz=clampF(mz+(G.mobile?1.6:0.7),-PB,PB);
+  CAMT.zoom=clampF(o.zoom!=null?o.zoom:(o.min||0.84)+span*0.045,o.min||0.5,1)}
+function camOverview(){Object.assign(CAMT,{px:CAMHOME.px,pz:CAMHOME.pz,zoom:CAMHOME.zoom})}
+/* coup de projecteur : recul d'angle + zoom un instant, puis retour */
+let punchT=0;
+function camPunch(dur=1400,pitch=0.98,zoomK=0.86){if(!G.camFollow||G.fast)return;const p0=CAMT.pitch,z0=CAMT.zoom;CAMT.pitch=Math.min(p0,pitch);CAMT.zoom=Math.max(.5,z0*zoomK);const id=++punchT;
+  setTimeout(()=>{if(id===punchT){CAMT.pitch=p0;CAMT.zoom=z0}},dur)}
+function setFollow(on){G.camFollow=on;lsSet('ne_follow',on?'1':'0');toast(on?'Caméra automatique : activée':'Caméra automatique : désactivée');if(!on)camOverview();renderCamCtl()}
+function tgPoints(u,tg){const o=[u];if(!tg)return o;if(Array.isArray(tg)){for(const x of tg){if(x&&x.d)o.push(x);else if(x&&x.c!==undefined)o.push(x)}}
+  else if(tg.units){o.push(...tg.units);if(tg.c!==undefined)o.push({c:tg.c,r:tg.r})}else if(tg.d)o.push(tg);else if(tg.c!==undefined)o.push({c:tg.c,r:tg.r});return o}
+
+/* ============ MODE MOBILE ============ */
+function initMobile(){const v=lsGet('ne_mobile');G.mobile=v!==null?v==='1':(matchMedia('(pointer:coarse)').matches||innerWidth<760);applyMobile()}
+function applyMobile(){document.body.classList.toggle('mobile',G.mobile);const t=$('#mtoggle');if(t)t.textContent=G.mobile?'🖥 Mode PC':'📱 Mode mobile';renderCamCtl();resize()}
+function setMobile(on){G.mobile=on;lsSet('ne_mobile',on?'1':'0');applyMobile();if(G.phase==='menu')showMenu();else if(G.phase==='pick')showPick();refresh()}
+function renderCamCtl(){const el=$('#camctl');if(!el)return;el.innerHTML=G.mobile?`<button class="btn" data-k="l">⟲</button><button class="btn" data-k="r">⟳</button><button class="btn" data-k="p">＋</button><button class="btn" data-k="m">－</button><button class="btn" data-k="v">◢</button><button class="btn" data-k="0">⌂</button><button class="btn" data-k="fx">ℹ</button><button class="btn" data-k="fo" style="${G.camFollow?'border-color:var(--amber)':''}">🎥</button><button class="btn" data-k="pc">🖥</button>`:'';
+  el.querySelectorAll('button').forEach(b=>b.onclick=()=>{const k=b.dataset.k;
+    if(k==='l')CAMT.yaw-=Math.PI/4;else if(k==='r')CAMT.yaw+=Math.PI/4;else if(k==='p')CAMT.zoom=Math.max(.45,CAMT.zoom/1.2);else if(k==='m')CAMT.zoom=Math.min(1.8,CAMT.zoom*1.2);
+    else if(k==='v')CAMT.pitch=CAMT.pitch>1.3?CAMHOME.pitch:1.5;else if(k==='0')Object.assign(CAMT,CAMHOME);else if(k==='fx')$('#fxref').classList.toggle('open');else if(k==='fo')setFollow(!G.camFollow);else if(k==='pc')setMobile(false)})}
+const mobHint=()=>{const m=G.mode,u=G.sel;
+  if(G.online&&G.turnPlayer!==G.myTeam)return'Tour de l\'adversaire…';if(G.bot&&G.turnPlayer===1)return'Le bot réfléchit…';
+  if(m==='idle')return'Touche un pion à l\'anneau vert (ou ⏭ Suivant)';
+  if(m==='frozen')return`${u.d.name} est gelé 🧊 : brise la glace (−1 PV) ou passe`;
+  if(m==='sel')return`Actions restantes : ${G.actions} · choisis une action ci-dessous`;
+  if(m==='move')return'Touche une case bleue pour te déplacer';
+  if(m==='atk')return`${G.tcount} ennemi(s) attaquable(s) : touches-en un (rouge)`;
+  if(m==='heal')return`${G.tcount} allié(s) à soigner : touches-en un (vert)`;
+  if(m==='card')return'Touche une carte renfort pour la jouer';
+  if(m==='abl'||m==='ult'){const s=m==='abl'?u.d.ab:u.d.ul;
+    return s.t==='none'?`${s.n} : appuie sur ✔ Valider`:s.t==='line'?`${s.n} : touche une case alignée pour viser, touche-la à nouveau pour lancer`:s.t==='zone'?`${s.n} : touche le centre pour viser, touche-le à nouveau pour lancer`:s.t==='multi'?`${s.n} : touche jusqu'à ${s.k} cibles (${G.multi.length}/${s.k}), puis ✔ Valider`:`${s.n} : touche une cible en surbrillance`}
+  return''};
+function renderDockMobile(insp){
+  const info=$('#info'),acts=$('#acts'),pips=$('#pips'),cards=$('#cards'),u=insp;pips.innerHTML='';cards.innerHTML='';
+  if(!u){info.innerHTML=`<div class="abil">${G.phase==='place'?'Touche une case jaune pour placer ton pion.':'Touche un pion pour voir ses stats.'}</div>`;acts.innerHTML=G.phase==='play'?`<button class="btn mb" data-m="next"><span class="ic">⏭</span><span>Suivant</span></button>`:'';
+    acts.querySelectorAll('[data-m]').forEach(b=>b.onclick=nextUnit);return}
+  const d=u.d;
+  info.innerHTML=`<div class="mh" style="--cc:${CLS[d.cls].c}"><b>${d.name}</b>${u.effect?`<span class="fxi">${fxIcon(u)}</span>`:''}<span class="chip">${d.sub}</span><span class="mst">${hearts(u)} · ATK ${stat(u,'atk')} DEF ${stat(u,'def')} HAB ${stat(u,'hab')} PRE ${stat(u,'pre')}</span><button class="btn mi" id="mInfo">${G.mInfo?'▾':'ℹ'}</button></div>`
+   +(G.mInfo?`<div class="abil">${d.power?`<b>Pouvoir · ${d.power}</b><br>`:''}<b>${d.ab.passive?'Passif · ':''}${d.ab.n}</b> — ${d.ab.x}<br><b>Ultime · ${d.ul.n}</b> — ${d.ul.x}</div>`:'');
+  $('#mInfo').onclick=()=>{G.mInfo=!G.mInfo;renderDock()};
+  if(G.sel!==u||G.phase!=='play'||locked()){acts.innerHTML=(G.phase==='play'&&!locked()&&!G.sel)?`<button class="btn mb" data-m="next"><span class="ic">⏭</span><span>Suivant</span></button>`:'';acts.querySelectorAll('[data-m]').forEach(b=>b.onclick=nextUnit);return}
+  const cnt=cmd=>cmd==='atk'?attackTargets(u).length:cmd==='abl'?(d.ab.t==='line'||d.ab.t==='zone'?bestHit(u,d.ab):targetsFor(u,d.ab).length):cmd==='ult'?(d.ul.t==='line'||d.ul.t==='zone'?bestHit(u,d.ul):targetsFor(u,d.ul).length):cmd==='heal'?healTargets(u).length:0;
+  const B=(ic,label,cmd,on)=>{const[ok,why]=can(cmd);const n=ok?cnt(cmd):0;return`<button class="btn mb ${on?'on':''}" data-cmd="${cmd}" ${ok?'':'disabled'} title="${why||''}"><span class="ic">${ic}</span><span class="lb">${label}</span>${n?`<small class="cnt">${n}</small>`:''}</button>`};
+  const aiming=['move','atk','abl','ult','heal','card'].includes(G.mode);
+  let h='';
+  if(G.mode==='frozen')h=`<button class="btn mb" data-cmd="thaw"><span class="ic">🔨</span><span>Briser (−1 PV)</span></button><button class="btn mb" data-cmd="end"><span class="ic">⏹</span><span>Passer</span></button>`;
+  else{
+    if(aiming&&G.mode!=='card'){const s=G.mode==='abl'?d.ab:G.mode==='ult'?d.ul:null,needOk=s&&(s.t==='none'||s.t==='multi'||s.t==='line'||s.t==='zone');
+      h+=`${needOk?`<button class="btn mb on" data-m="ok"><span class="ic">✔</span><span>Valider</span></button>`:''}<button class="btn mb" data-m="cancel"><span class="ic">✖</span><span>Annuler</span></button>`}
+    else if(G.mode==='card')h+=`<button class="btn mb" data-m="cancel"><span class="ic">✖</span><span>Annuler</span></button>`;
+    h+=B('➜','Déplacer','move',G.mode==='move')+B('⚔','Attaquer','atk',G.mode==='atk')+B('✦',(d.ab.passive?'Passif · ':'')+d.ab.n,'abl',G.mode==='abl')+B('★','Ultime','ult',G.mode==='ult')+B('🎴',`Renfort ${G.hand[u.team].length}`,'card',G.mode==='card')+(d.cls==='S'?B('✚','Soigner','heal',G.mode==='heal'):'')
+      +`<button class="btn mb" data-m="next"><span class="ic">⏭</span><span>Suivant</span></button><button class="btn mb" data-cmd="end"><span class="ic">⏹</span><span>Fin</span></button>`}
+  acts.innerHTML=h;
+  acts.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=()=>command(b.dataset.cmd));
+  acts.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{const k=b.dataset.m;if(k==='next')nextUnit();else if(k==='cancel')cancel();else if(k==='ok'){
+    if(G.mode==='abl'||G.mode==='ult'){const s=G.mode==='abl'?d.ab:d.ul;if(s.t==='none')doAbility(G.mode==='ult',targetsFor(u,s));else if(s.t==='multi'&&G.multi.length){const l=G.multi.slice();G.multi=[];doAbility(G.mode==='ult',l)}else confirmAct()}}});
+  if(G.mode==='card'){const hand=G.hand[u.team];cards.innerHTML=hand.map((c,i)=>`<button class="card mcard" data-i="${i}"><b>${c.n}</b><br>${c.x}</button>`).join('');cards.querySelectorAll('button').forEach(b=>b.onclick=()=>useCard(+b.dataset.i))}
+  pips.innerHTML=`Actions : ${[0,1].map(i=>`<span class="pip ${i<G.actions?'':'off'}"></span>`).join('')}${u.freeAtk>0?` · Blitz ×${u.freeAtk}`:''}`}
 
 /* ============ BOUCLE ============ */
 let last=performance.now();
@@ -1368,7 +1493,7 @@ function frame(now){const raw=Math.min(.05,(now-last)/1000);last=now;const t=now
   if(G.phase==='play'&&G.bot&&G.turnPlayer===1&&G.mode==='idle'&&!G.busy&&!G.botRun)botTurn();
   paintHL();renderer.render(scene,cam);renderBadges();requestAnimationFrame(frame)}
 
-resize();renderKeys();startMenu();requestAnimationFrame(frame);
+initMobile();$('#mtoggle').onclick=()=>setMobile(!G.mobile);renderKeys();startMenu();requestAnimationFrame(frame);
 </script>
 
 </body></html>
