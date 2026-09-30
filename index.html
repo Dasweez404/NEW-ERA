@@ -22,7 +22,7 @@ canvas#c{position:absolute;inset:0;width:100%;height:100%;display:block;outline:
 .badge .hp i{font-style:normal;color:#ffffff40}
 .badge .nm{display:inline-block;padding:0 5px;border-radius:3px;background:#0009;color:#fff}
 .badge.t0 .nm{border-bottom:2px solid var(--white)} .badge.t1 .nm{border-bottom:2px solid #777c93}
-.badge .fx{font-size:13px}
+.badge .fx{font-size:13px} .fxi{display:inline-block;font-size:14px;filter:drop-shadow(0 0 3px #000);animation:fxbob 1s ease-in-out infinite} @keyframes fxbob{50%{transform:translateY(-2px) scale(1.15)}} .badge .nm .fxi{font-size:13px}
 .flt{position:absolute;transform:translate(-50%,-50%);font-weight:700;font-size:20px;text-shadow:0 2px 4px #000;animation:flt 1.3s ease-out forwards;white-space:nowrap}
 @keyframes flt{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}14%{opacity:1;transform:translate(-50%,-60%) scale(1.45)}28%{transform:translate(-50%,-70%) scale(1)}100%{opacity:0;transform:translate(-50%,-190%) scale(1)}}
 @keyframes diepop{0%{transform:scale(.4) rotate(-20deg)}60%{transform:scale(1.35) rotate(6deg)}100%{transform:scale(1) rotate(0)}}
@@ -125,7 +125,7 @@ kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;bo
 .sv{display:flex;gap:10px;font-family:var(--mono);font-weight:700;font-size:13px;margin-top:2px} .sv i{font-style:normal}
 .pinfo{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--cc);border-radius:8px;padding:8px 12px;margin-top:8px}
 .pinfo h3{margin:0 0 3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap} .stars{color:var(--amber);font-size:12px;letter-spacing:1px}
-@media (min-width:1101px){#dock{width:min(820px,calc(100% - 540px))}}
+@media (min-width:1101px){#dock{width:min(820px,calc(100% - 600px))}}
 @media (max-width:1100px){.roster{display:none}#keys{display:none}}
 @media (max-width:700px){#log{display:none}#dock{grid-template-columns:1fr}#acts{justify-content:flex-start}}
 </style>
@@ -165,7 +165,7 @@ const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()
 /* Personnages : stats issues de Projet-Cards.csv (cartes dont les stats sont renseignées).
    Capacités et ultimes : improvisés par rôle, une variante choisie par personnage. */
 const ROLE_CLS={Brawler:'A',Performer:'A',Protector:'D',Juggernaut:'D',Ranger:'T',Flanker:'T',Assist:'S',Engineer:'S'};
-const rollPop=(u,t)=>{const r=d6();pop(t,'d6 : '+r,'#ffb42e');log(`${u.d.name} lance un d6 : <span class="r">${r}</span>`);return r};
+const rollPop=(u,t)=>{let r=d6();if(G.variant&&u.flags&&u.flags.rerollAb){u.flags.rerollAb=false;r=Math.max(r,d6());log('Performer : relance conservée')}pop(t,'d6 : '+r,'#ffb42e');log(`${u.d.name} lance un d6 : <span class="r">${r}</span>`);return r};
 const ENM=(n,x,rad,fn)=>({n,t:'none',aoe:'enemies',rad,x,run:async(u,l)=>{for(const t of l)await fn(u,t)}});
 const ALY=(n,x,rad,fn)=>({n,t:'none',aoe:'allies',rad,x,run:async(u,l)=>{for(const a of l)await fn(u,a)}});
 const SELF=(n,x,fn)=>({n,t:'none',aoe:'self',rad:0,x,run:fn});
@@ -223,9 +223,190 @@ const LIB={
   ul:[TGT('Cryo-pulse','Cible à portée : Gelé (passe son tour ou sacrifie 1 PV).',(u,t)=>addEff(t,'frozen',u)),
       ALY('Surcharge','Tous les alliés : +1 ATK et +1 DEF jusqu\'à la fin de la manche.',99,async(u,a)=>{addBuff(a,'atk',1,'round',u);addBuff(a,'def',1,'round',u)})]}
 };
+/* ===== Pouvoirs (POUVOIRS.pdf) : chaque porteur reçoit une capacité et un ultime inspirés de son pouvoir ===== */
+const effTxt=e=>`${EFF[e][0]} ${EFF[e][1]}`;
+const RADT=r=>typeof r==='function'?'PRE+1':`≤${r} cases`;
+const STN={atk:'ATK',def:'DEF',hab:'HAB'};
+const bTxt=(k,v,d)=>`${v>0?'+':''}${v} ${STN[k]} ${d==='round'?'jusqu\'à la fin de la manche':d==='self'?'ce tour':'jusqu\'à son prochain tour'}`;
+async function swapPos(a,b){const pa=a.mesh.position.clone(),pb=b.mesh.position.clone();ringFx(pa,0xb7a0ff,1.2);ringFx(pb,0xb7a0ff,1.2);
+  await tween(.4,k=>{a.mesh.position.lerpVectors(pa,pb,k);b.mesh.position.lerpVectors(pb,pa,k);a.mesh.position.y+=Math.sin(k*Math.PI)*.5;b.mesh.position.y+=Math.sin(k*Math.PI)*.5});
+  [a.c,b.c]=[b.c,a.c];[a.r,b.r]=[b.r,a.r];a.mesh.position.copy(cellPos(a.c,a.r));b.mesh.position.copy(cellPos(b.c,b.r));
+  for(const x of[a,b])if(G.token&&x.c===G.token.c&&x.r===G.token.r)await collectToken(x)}
+const B={
+ eff:(n,e,th=0,dm=0,o={})=>TGT(n,`Cible ${o.far?'à ≤'+o.far+' cases':'à portée'}${th?`, d6 ${th}+`:''} : ${effTxt(e)}${dm?` et −${dm} PV`:''}.`,async(u,t)=>{if(th&&rollPop(u,t)<th)return;await addEff(t,e,u);if(dm&&t.alive)await dmg(t,dm,u)},o),
+ hit:(n,dm,o={})=>TGT(n,`Cible ${o.far?'à ≤'+o.far+' cases':'à portée'} : −${dm} PV.`,(u,t)=>dmg(t,dm,u),o),
+ deb:(n,k,v,o={})=>TGT(n,`Cible à portée : ${bTxt(k,v,'turn').replace('son prochain tour','le prochain tour du lanceur')}.`,async(u,t)=>{addBuff(t,k,v,'turn',u);pop(t,`${v} ${STN[k]}`,'#9fe')},o),
+ aoe:(n,e,rad,dm=0)=>ENM(n,`Ennemis ${RADT(rad)} : ${[e?effTxt(e):'',dm?`−${dm} PV`:''].filter(Boolean).join(' et ')}.`,rad,async(u,t)=>{if(e)await addEff(t,e,u);if(dm&&t.alive)await dmg(t,dm,u)}),
+ aoeDeb:(n,k,v,rad)=>ENM(n,`Ennemis ${RADT(rad)} : ${v} ${STN[k]} jusqu'au prochain tour du lanceur.`,rad,async(u,t)=>{addBuff(t,k,v,'turn',u);pop(t,`${v} ${STN[k]}`,'#9fe')}),
+ drain:n=>TGT(n,'Cible à portée : −1 PV, le lanceur récupère 1 PV.',async(u,t)=>{if(await dmg(t,1,u))heal(u,1)}),
+ swap:(n,far=4)=>TGT(n,`Échange sa place avec un ennemi à ≤${far} cases.`,(u,t)=>swapPos(u,t),{far}),
+ pull:(n,far=4)=>TGT(n,`Attire un ennemi à ≤${far} cases au contact.`,async(u,t)=>{await teleport(t,freeAdj(u)[0])},{far,adjSelf:true}),
+ dash:(n,r,b)=>({n,t:'cell',cell:r,x:`Se téléporte à ≤${r} cases${b?`, ${bTxt(b[0],b[1],'self')}`:''}.`,run:async(u,c)=>{await teleport(u,c);if(b)addBuff(u,b[0],b[1],'self',u)}}),
+ strike:(n,far,bo=0,e)=>TGT(n,`Se téléporte au contact d'un ennemi à ≤${far} cases${bo?`, +${bo} ATK`:''}, combat${e?`. Si touché : ${effTxt(e)}`:''}.`,async(u,t)=>{if(await dashHit(u,t,bo)==='hit'&&e)await addEff(t,e,u)},{far,adj:true}),
+ self:(n,parts,hl=0)=>SELF(n,parts.map(([k,v,d])=>bTxt(k,v,d||'turn')).join(', ')+(hl?`, +${hl} PV`:'')+'.',async u=>{for(const[k,v,d]of parts)addBuff(u,k,v,d||'turn',u);if(hl)heal(u,hl)}),
+ ally:(n,k,v,d='turn')=>({n,t:'ally',x:`Allié à portée (ou soi) : ${bTxt(k,v,d)}.`,run:async(u,t)=>{addBuff(t,k,v,d,u)}}),
+ allyAoe:(n,parts,rad,d='turn')=>ALY(n,`Alliés ${rad>=99?'':RADT(rad)+' '}: ${parts.map(([k,v])=>bTxt(k,v,d)).join(', ')}.`.replace('Alliés :','Tous les alliés :'),rad,async(u,a)=>{for(const[k,v]of parts)addBuff(a,k,v,d,u)}),
+ heal:n=>({n,t:'ally',x:'Allié à portée (ou soi) : +1 PV et retire son effet.',run:async(u,t)=>{heal(t,1);cleanse(t)}}),
+ healAoe:(n,rad=99)=>ALY(n,`Alliés ${rad>=99?'(tous)':RADT(rad)} : +1 PV et effets retirés.`,rad,async(u,a)=>{heal(a,1);cleanse(a)}),
+ act:(n,k)=>SELF(n,`+${k} action${k>1?'s':''} : déplacement et attaque de nouveau possibles.`,async u=>{G.actions+=k;G.used.move=false;G.used.atk=false;pop(u,'+'+k+' action','#ffd27a')}),
+ blitz:n=>SELF(n,'Cette attaque et la suivante ne coûtent aucune action.',async u=>{u.freeAtk=2;pop(u,'ENCHAÎNEMENT','#ff9a5a')}),
+ steal:(n,dm=0)=>TGT(n,`Cible à portée : retire ses effets et bonus${dm?`, −${dm} PV`:''} ; le lanceur gagne +1 ATK et +1 DEF ce tour.`,async(u,t)=>{t.effect=null;t.buffs=t.buffs.filter(b=>b.v<0);addBuff(u,'atk',1,'self',u);addBuff(u,'def',1,'self',u);if(dm)await dmg(t,dm,u);refresh()})
+};
+const PRE2=PRE1;
+/* traits animaux : [capacité, ultime] selon le comportement de l'animal */
+const TRAIT={
+ flight:a=>[B.dash(`Envol · ${a}`,3),B.strike(`Piqué · ${a}`,5,1)],
+ fast:a=>[B.dash(`Sprint · ${a}`,3,['atk',1]),B.blitz(`Frénésie · ${a}`)],
+ venom:a=>[B.eff(`Venin · ${a}`,'toxic'),B.aoe(`Nuée toxique · ${a}`,'toxic',PRE1)],
+ tank:a=>[B.self(`Carapace · ${a}`,[['def',2]]),B.allyAoe(`Rempart · ${a}`,[['def',2]],2)],
+ charge:a=>[B.strike(`Charge · ${a}`,3),B.strike(`Charge dévastatrice · ${a}`,4,2)],
+ bite:a=>[B.eff(`Morsure · ${a}`,'stun',4),B.hit(`Mâchoires · ${a}`,2)],
+ stealth:a=>[B.dash(`Embuscade · ${a}`,3,['def',1]),B.strike(`Bond · ${a}`,5,2)],
+ support:a=>[B.heal(`Soins · ${a}`),B.healAoe(`Cri de ralliement · ${a}`)],
+ spit:a=>[B.eff(`Jet · ${a}`,'jam'),B.aoe(`Nuage · ${a}`,'disrupt',3)],
+ pack:a=>[B.allyAoe(`Meute · ${a}`,[['atk',1]],3),B.allyAoe(`Hurlement · ${a}`,[['atk',1],['def',1]],99)],
+ display:a=>[B.eff(`Parade · ${a}`,'disrupt'),B.aoe(`Roue éblouissante · ${a}`,'disrupt',3)]
+};
+const AN=(a,t)=>['Zoologique · '+a,...TRAIT[t](a)];
+const A2=(a,t1,b,t2)=>['Zoologique · '+a+(b!==a?' / '+b:''),TRAIT[t1](a)[0],TRAIT[t2](b)[1]];
+/* numéro de carte : [pouvoir, capacité, ultime] */
+const POW={
+ 0:['Anti-matière',B.hit('Rayon d\'anti-matière',1),B.aoe('Annihilation',null,PRE1,1)],
+ 1:['Foudre olympienne',B.eff('Foudre','stun',4),B.aoe('Fureur de Zeus','stun',3,1)],
+ 2:['Reine de l\'Olympe',B.allyAoe('Voile protecteur',[['def',1]],2),B.aoe('Jalousie divine','disrupt',3)],
+ 3:['Mers & tempêtes',B.aoe('Marée','numb',PRE1),B.aoe('Raz-de-marée',null,4,1)],
+ 4:['Royaume des morts',B.drain('Âmes captives'),B.hit('Jugement dernier',2,{far:6})],
+ 5:['Stratégie divine',B.self('Formation en tortue',[['def',2]]),B.allyAoe('Plan de bataille',[['atk',1],['def',1]],99)],
+ 6:['Charme',B.eff('Charme','numb'),B.healAoe('Baiser d\'amour')],
+ 7:['Guerre',B.self('Soif de sang',[['atk',2]]),B.aoe('Cri de guerre','stun',PRE1,1)],
+ 8:['Lumière & musique',B.heal('Chant de guérison'),B.healAoe('Hymne solaire')],
+ 9:['Moissons',B.eff('Racines','numb'),B.aoe('Famine','toxic',PRE1)],
+ 10:['Messager divin',B.dash('Sandales ailées',4),B.act('Course du messager',1)],
+ 11:['Ivresse',B.eff('Ivresse','disrupt'),B.aoe('Bacchanale','disrupt',3,1)],
+ 12:['Récoltes',B.dash('Pas de blé',3,['hab',1]),B.allyAoe('Abondance',[['hab',2]],99,'round')],
+ 13:['Forge divine',B.eff('Fer rouge','burn'),B.allyAoe('Armes forgées',[['atk',1],['def',1]],99,'round')],
+ 14:AN('Loup','pack'),
+ 15:['Air',B.eff('Rafale','numb'),B.aoe('Tornade','stun',3)],
+ 16:['Logique inversée',B.swap('Absurdité'),B.aoe('Paradoxe','disrupt',PRE1)],
+ 17:['Mouvement',B.ally('Accélération','hab',2,'round'),B.aoeDeb('Ralentissement général','hab',-2,99)],
+ 18:['Magnétisme',B.pull('Aimant'),B.aoe('Champ magnétique','stun',3)],
+ 19:['Gaz',B.aoe('Nuage de gaz','jam',2),B.aoe('Gaz toxique','toxic',3)],
+ 20:['Slime',B.eff('Bave collante','numb'),B.aoe('Marée visqueuse','numb',PRE1,1)],
+ 21:['Électricité',B.eff('Décharge','stun',4),B.aoe('Surtension','stun',3,1)],
+ 23:['Gravité',B.eff('Gravité accrue','numb'),B.aoe('Singularité','numb',4,1)],
+ 25:['Énergie cinétique',B.deb('Absorber l\'élan','atk',-1),B.hit('Impact différé',2,{far:5})],
+ 30:['Temps',B.act('Accélération temporelle',1),B.act('Arrêt du temps',2)],
+ 32:['Chance',B.ally('Coup de chance','def',2),B.allyAoe('Jour de veine',[['atk',1],['def',1]],99,'round')],
+ 35:AN('Hippopotame','charge'),
+ 40:['Invisibilité',B.self('Disparition',[['def',2]]),B.strike('Frappe invisible',5,2)],
+ 41:A2('Éléphant','tank','Seiche','spit'),
+ 51:['Virus',B.eff('Infection','toxic'),B.aoe('Pandémie','toxic',3)],
+ 52:['Lames',B.hit('Coup de lame',1),B.aoe('Tourbillon de lames',null,PRE1,1)],
+ 53:['Période',B.heal('Rajeunissement'),B.aoeDeb('Retour à l\'enfance','atk',-1,4)],
+ 54:['Tournis',B.aoe('Tournis','numb',1),B.aoe('Cyclone de membres',null,PRE1,1)],
+ 62:['Perméabilité',B.dash('Traverser les murs',3),B.strike('Surgir de la paroi',4,1)],
+ 63:['IA',B.eff('Piratage','jam'),B.aoe('Ransomware','disrupt',3)],
+ 66:AN('Suricate','support'),
+ 67:['Contraire',B.swap('Inversion'),B.aoeDeb('Contre-pied','def',-1,99)],
+ 73:['Espace',B.dash('Téléportation',5),B.strike('Distorsion',6,1)],
+ 74:['Portail',B.swap('Portails jumeaux',5),B.dash('Grand portail',6)],
+ 84:AN('Veuve noire','venom'),
+ 87:AN('Rhinocéros','charge'),
+ 95:['Élastique',B.pull('Bras élastique'),B.aoe('Claque élastique','stun',PRE1)],
+ 106:['Personnalité IA',B.ally('Programmation','atk',1),B.allyAoe('Mise à jour',[['atk',1]],99,'round')],
+ 107:A2('Rainette','fast','Rainette','venom'),
+ 108:['Reflets',B.dash('Saut de reflet',3),B.strike('Coup de miroir',6,2)],
+ 109:['Cryptides',B.eff('Cauchemar','disrupt'),B.aoe('Terreur','stun',3)],
+ 110:AN('Panda','tank'),
+ 111:AN('Panthère noire','stealth'),
+ 118:['Effacement',B.eff('Effacer un pouvoir','disrupt'),B.aoe('Page blanche','disrupt',5)],
+ 119:AN('Lion','bite'),
+ 120:['Piques',B.self('Hérissement',[['def',2]]),B.aoe('Explosion de piques',null,1,1)],
+ 128:['Température froide / Éponge',B.eff('Givre','numb'),B.hit('Restitution des dégâts',2)],
+ 133:['Sucre',B.self('Sucre rapide',[['hab',2],['atk',1]]),B.self('Overdose de sucre',[['atk',2],['def',1]],1)],
+ 139:AN('Crocodile du Nil','bite'),
+ 140:['Sable',B.aoe('Sable dans les yeux','jam',2),B.aoe('Tempête de sable','numb',4,1)],
+ 141:AN('Morse','tank'),
+ 143:AN('Léopard','stealth'),
+ 144:['Boue',B.aoe('Bourbier','numb',2),B.aoe('Glissement de terrain','stun',PRE1)],
+ 152:['Plante',B.heal('Bourgeons'),B.healAoe('Floraison')],
+ 154:AN('Anémone','venom'),
+ 155:['Écorce',B.self('Armure d\'écorce',[['def',2]]),B.allyAoe('Forêt protectrice',[['def',1]],99)],
+ 157:['Pierre',B.self('Poing de pierre',[['atk',1],['def',1]]),B.aoe('Éboulement','stun',PRE1,1)],
+ 165:['Métamorphose',B.dash('Forme de fauve',3,['atk',1]),B.self('Forme bestiale',[['atk',2],['hab',1]])],
+ 166:['Ténèbres',B.eff('Voile d\'ombre','disrupt'),B.aoe('Nuit totale','disrupt',4,1)],
+ 167:['Ombre',B.dash('Pas d\'ombre',3),B.strike('Lame d\'ombre',6,2)],
+ 176:['Trou noir',B.pull('Aspiration'),B.aoe('Horizon des événements',null,3,1)],
+ 177:['Vol de pouvoirs',B.steal('Pickpocket'),B.steal('Casse du siècle',1)],
+ 178:['Destruction',B.hit('Poussière',1),B.hit('Anéantissement',2)],
+ 179:['Ronces',B.eff('Ronces','numb'),B.aoe('Forêt de ronces','numb',PRE1,1)],
+ 188:AN('Renard','stealth'),
+ 189:['Rembobinage',B.heal('Rembobinage'),B.act('Retour en arrière',1)],
+ 190:['Métal',B.self('Peau de métal',[['def',2]]),B.self('Armure lourde',[['atk',1],['def',2]],1)],
+ 200:['Séisme',B.aoe('Secousse','numb',PRE1),B.aoe('Grand séisme','stun',4,1)],
+ 201:['Magma',B.eff('Jet de lave','burn'),B.aoe('Éruption','burn',PRE1,1)],
+ 202:['Bête',B.self('Monstre craint',[['atk',2]]),B.aoe('Terreur pure','stun',3,1)],
+ 203:['Climat',B.aoe('Brouillard','jam',3),B.aoe('Tempête','stun',4,1)],
+ 213:AN('Pygargue à tête blanche','flight'),
+ 214:['Conscience',B.ally('Insuffler la vie','atk',1),B.allyAoe('Éveil des objets',[['atk',1],['def',1]],99,'round')],
+ 215:AN('Manchot royal','tank'),
+ 218:['Roue',B.dash('Roulade',4),B.strike('Écrasement à roues',5,1)],
+ 222:['Transmutation',B.heal('Transmutation'),B.healAoe('Alchimie')],
+ 223:['Forme arme',B.self('Forme d\'arme',[['atk',2]]),B.blitz('Lame vivante')],
+ 234:['Air comprimé / Kératine',B.dash('Propulsion',3),B.aoe('Explosion d\'air','stun',PRE1)],
+ 235:['Vœu',B.heal('Étoile filante'),B.healAoe('Pluie d\'étoiles')],
+ 236:AN('Paon','display'),
+ 245:['Poison',B.eff('Fiole toxique','toxic'),B.aoe('Nuage empoisonné','toxic',PRE1,1)],
+ 246:['Faufilement',B.dash('Glisser',3,['def',1]),B.strike('Coup de papier',5,2)],
+ 247:['Blueprint',B.eff('Piège fabriqué','numb'),B.aoe('Champ de mines','stun',3,1)],
+ 257:['Nageoire / Vitesse',B.dash('Sprint',4,['atk',1]),B.blitz('Vitesse maximale')],
+ 258:['Rebond',B.self('Bond',[['hab',2],['def',1]]),B.aoe('Sol rebondissant','numb',3)],
+ 274:['Aura',B.allyAoe('Aura',[['atk',1]],3),B.allyAoe('Aura maximale',[['atk',1],['def',1],['hab',1]],99,'round')],
+ 275:['Champ de force',B.allyAoe('Bulle',[['def',2]],1),B.allyAoe('Dôme',[['def',2]],99)],
+ 276:AN('Iguane','bite'),
+ 277:['Dédoublement',B.blitz('Bras multiples'),B.act('Corps dédoublé',1)],
+ 278:['Psychokinésie',B.pull('Lévitation'),B.aoe('Tempête psychique','stun',4)],
+ 279:['Glace',B.eff('Givre','numb'),B.eff('Prison de glace','frozen')],
+ 280:['Ondes physiques',B.aoe('Onde de choc','numb',2),B.aoe('Onde dévastatrice','stun',4,1)],
+ 281:AN('Lynx','stealth'),
+ 288:['Barrière',B.allyAoe('Barrière',[['def',2]],1),B.healAoe('Mur de soin')],
+ 290:['Éclosion',B.heal('Éclosion revigorante'),B.healAoe('Nuée de bourgeons')],
+ 292:['Régénération',B.self('Régénération',[],1),B.self('Renaissance',[['def',1]],2)],
+ 300:['Eau',B.aoe('Vague','numb',2),B.aoe('Déferlante',null,4,1)],
+ 301:['Respiration',B.dash('Plongée',3),B.strike('Assaut sous-marin',4,1)],
+ 302:AN('Orque','bite'),
+ 306:AN('Ours polaire','tank'),
+ 313:['Astéroïdes',B.hit('Météorite',1),B.aoe('Pluie d\'astéroïdes',null,4,1)],
+ 314:['Esprit',B.swap('Échange d\'esprit'),B.eff('Possession','frozen')],
+ 315:['Manipulation mentale',B.eff('Suggestion','jam'),B.eff('Contrôle mental','frozen')],
+ 323:A2('Dragon de Komodo','flight','Dragon de Komodo','venom'),
+ 324:A2('Tigre','stealth','Tigre','charge'),
+ 325:A2('Buffle','charge','Buffle','tank'),
+ 326:['Singe capucin / Portail',B.swap('Portails',5),B.dash('Grand portail',6)],
+ 334:AN('Requin blanc','bite'),
+ 335:AN('Scorpion','venom'),
+ 336:['Fumée',B.aoe('Écran de fumée','jam',2),B.aoe('Nuage suffocant','disrupt',4)],
+ 337:AN('Mandrill','pack'),
+ 347:['Acide',B.deb('Corrosion','def',-1),B.aoe('Pluie acide',null,4,1)],
+ 348:AN('Piranha','bite'),
+ 349:['Rêves',B.eff('Somnolence','numb'),B.eff('Sommeil profond','frozen')],
+ 350:['Forme maxi',B.self('Croissance',[['atk',2],['def',1]]),B.aoe('Piétinement de géant','stun',PRE1,1)],
+ 351:['État',B.eff('Solidification','numb'),B.aoe('Changement d\'état','stun',PRE1)],
+ 360:['Lumière',B.eff('Éblouissement','disrupt'),B.aoe('Éclat solaire','disrupt',4,1)],
+ 361:['Télékinésie',B.pull('Saisie télékinétique'),B.hit('Projectile télékinétique',2,{far:6})],
+ 362:AN('Varan','venom'),
+ 363:['Ailes',B.dash('Battement d\'ailes',4),B.strike('Piqué',5,1)],
+ 364:AN('Coati','fast'),
+ 365:['Durcissement',B.self('Peau durcie',[['def',2]]),B.self('Invincible',[['atk',1],['def',3]])],
+ 373:['Muscles',B.self('Gonflette',[['atk',2]]),B.blitz('Déchaînement')],
+ 374:['Feu',B.eff('Boule de feu','burn'),B.aoe('Brasier','burn',PRE1,1)],
+ 375:['Réalité',B.dash('Copier-coller',4),B.act('Annuler',2)],
+ 376:AN('Cerf','charge')
+};
 const RAW=[[0,"Néo","Performer",3,4,2,3,5],[1,"Zeus","Brawler",4,3,3,2,5],[2,"Héra","Engineer",3,3,2,3,4],[3,"Poséidon","Protector",2,4,3,2,4],[4,"Hadès","Ranger",3,2,2,4,4],[5,"Athéna","Protector",3,4,1,2,3],[6,"Aphrodite","Assist",2,3,2,3,3],[7,"Arès","Juggernaut",4,3,2,1,3],[8,"Apollo","Assist",2,2,3,3,3],[9,"Déméter","Ranger",2,2,2,4,3],[10,"Hermès","Flanker",3,1,4,2,3],[11,"Dionysos","Brawler",3,3,1,2,3],[12,"Cérès","Flanker",3,2,3,2,3],[13,"Héphaistos","Engineer",4,3,1,2,3],[14,"Moon Fang","Juggernaut",3,4,2,1,3],[15,"Vortex","Ranger",2,1,3,4,3],[16,"Brainless","Performer",2,2,3,3,3],[17,"Move","Assist",3,2,2,3,3],[18,"Magnet","Protector",2,4,1,3,3],[19,"Scatter","Assist",3,2,3,2,3],[20,"Viscous","Protector",3,3,2,2,3],[21,"Blackout","Flanker",3,2,4,2,4],[23,"Hover","Ranger",2,3,2,3,3],[25,"Kinetic","Ranger",3,1,2,4,3],[30,"Mr.Midnight","Performer",3,3,2,3,4],[32,"Chance","Assist",3,3,1,3,3],[35,"Miziki","Juggernaut",3,4,1,2,3],[40,"Diaphane","Flanker",3,3,3,2,4],[41,"Italanta","Juggernaut",3,4,1,2,3],[51,"Captain Diziiz","Engineer",4,3,2,2,4],[52,"Lann","Protector",3,3,2,2,3],[53,"Dr.Fank","Assist",3,3,2,2,3],[54,"Turni","Brawler",4,2,2,2,3],[62,"Cracken","Assist",3,2,3,3,4],[63,"Zero Day","Flanker",2,2,3,3,3],[66,"Rooter","Engineer",3,2,3,1,2],[67,"Smish","Assist",2,3,2,2,2],[73,"Kasuf","Flanker",3,3,4,1,4],[74,"Passage","Ranger",2,2,2,4,3],[84,"Venena","Ranger",3,1,3,4,4],[87,"Pembe","Engineer",3,3,2,2,3],[95,"Gummi","Protector",3,3,2,3,4],[106,"Bot","Assist",2,3,2,2,1],[107,"Alíngua","Flanker",3,2,3,3,4],[108,"Dugalen","Ranger",3,2,1,4,3],[109,"Monstruo","Performer",3,3,3,1,3],[110,"Zhúzi","Juggernaut",4,3,2,1,3],[111,"Khama","Brawler",3,2,3,2,3],[118,"Apagar","Assist",3,3,2,3,4],[119,"Shars","Brawler",4,3,2,1,3],[120,"Qima","Juggernaut",3,3,3,1,3],[128,"Gurume","Brawler",3,4,3,1,4],[133,"Lecker","Protector",3,3,2,1,2],[139,"Breakbone","Juggernaut",3,4,3,1,4],[140,"Ramil","Performer",3,3,2,2,3],[141,"Icetooth","Protector",3,3,1,3,3],[143,"Boneka","Brawler",2,3,2,3,3],[144,"Tinard","Protector",2,4,2,1,2],[152,"Arwat","Assist",2,4,3,2,4],[154,"Veibuca","Ranger",3,2,2,3,3],[155,"Bellen","Protector",2,3,2,3,3],[157,"Bato","Brawler",3,3,2,2,2],[165,"Morfosia","Performer",2,3,3,3,4],[166,"Muerta","Performer",3,2,3,2,3],[167,"Alzali","Ranger",3,2,2,3,3],[176,"Ahri","Juggernaut",3,4,2,2,4],[177,"Volé","Assist",3,3,3,2,4],[178,"Vacía","Performer",4,4,2,1,4],[179,"Meno","Brawler",3,4,1,2,3],[188,"Chitry","Flanker",4,3,3,1,4],[189,"Rebob","Performer",2,2,3,3,3],[190,"Logam","Juggernaut",3,4,2,1,3],[200,"Trake","Brawler",4,3,1,3,4],[201,"Pélé","Performer",4,3,2,2,4],[202,"Belzébuth","Juggernaut",4,4,2,1,4],[203,"Hörmung","Performer",4,2,3,2,4],[213,"Sharp","Brawler",3,2,3,3,4],[214,"Jinsei","Engineer",3,2,3,2,3],[215,"Alf","Protector",2,3,3,2,3],[218,"Big Wheel","Flanker",2,2,3,2,2],[222,"Ban-Cheol","Assist",3,3,3,2,4],[223,"Shinda","Performer",2,2,3,3,3],[234,"Panja","Performer",3,4,2,2,4],[235,"Inkho","Assist",2,3,2,4,3],[236,"Rang","Ranger",3,2,2,3,3],[245,"Otrava","Brawler",4,3,2,2,4],[246,"Sneaka","Flanker",3,3,3,2,4],[247,"Crâne","Ranger",3,1,3,3,3],[257,"Rènào","Flanker",3,3,4,1,4],[258,"Jog","Protector",3,4,2,1,3],[274,"Ora","Performer",3,3,3,2,4],[275,"Dafa","Protector",2,4,2,2,3],[276,"Guano","Brawler",4,3,2,1,3],[277,"Multi","Juggernaut",3,3,2,2,3],[278,"Levit","Juggernaut",3,3,1,3,3],[279,"Rozko","Flanker",3,2,3,2,3],[280,"Myrsky","Engineer",3,2,2,3,3],[281,"Desgarra","Ranger",3,1,3,3,3],[288,"Tabib","Protector",3,4,2,2,4],[290,"Rescate","Performer",2,2,2,4,3],[292,"Kokal","Juggernaut",2,4,2,2,3],[300,"Kuini Wai","Protector",3,4,2,2,4],[301,"Tuba","Flanker",2,3,3,2,3],[302,"Natsi","Juggernaut",3,3,3,1,3],[306,"Nanook","Brawler",3,3,2,2,3],[313,"Milaza","Ranger",2,3,2,4,4],[314,"Anma","Flanker",3,2,3,2,3],[315,"Djinn","Assist",2,2,3,3,3],[323,"Naga","Protector",3,3,3,3,5],[324,"Sanjin","Brawler",4,3,2,2,4],[325,"Pembe","Protector",3,4,2,2,4],[326,"Hun","Flanker",3,2,4,2,4],[334,"Tangaroa","Juggernaut",4,4,3,1,5],[335,"Nabsi","Engineer",3,2,3,3,4],[336,"Fumar","Flanker",3,3,3,2,4],[337,"Oum-Oum","Ranger",2,2,3,4,4],[347,"Silla","Engineer",3,4,3,2,5],[348,"Frasco","Engineer",2,4,2,3,4],[349,"Mriya","Flanker",2,2,4,3,4],[350,"Giganto","Brawler",4,3,2,2,4],[351,"Mêlée","Juggernaut",2,3,2,3,3],[360,"Héméra","Flanker",2,2,4,4,5],[361,"Random","Ranger",3,2,2,4,4],[362,"Kaï","Juggernaut",3,4,2,2,4],[363,"Hokioi","Flanker",2,3,4,2,4],[364,"Nasua","Flanker",2,2,3,3,3],[365,"Tasalub","Protector",4,4,1,1,3],[373,"Black.1","Brawler",4,4,2,2,5],[374,"Red.2","Flanker",4,2,3,2,4],[375,"Green.3","Performer",3,2,3,3,4],[376,"Blue.4","Juggernaut",3,3,3,2,4]];
-const CHARS=RAW.map(([num,name,sub,atk,def,hab,pre,stars])=>({id:'c'+num,num,name,sub,cls:ROLE_CLS[sub],atk,def,hab,pre,stars,
-  ab:LIB[sub].ab[num%3],ul:LIB[sub].ul[Math.floor(num/3)%2]}));
+const CHARS=RAW.map(([num,name,sub,atk,def,hab,pre,stars])=>{const p=POW[num];
+  return{id:'c'+num,num,name,sub,cls:ROLE_CLS[sub],atk,def,hab,pre,stars,power:p?p[0]:null,
+  ab:p?p[1]:LIB[sub].ab[num%3],ul:p?p[2]:LIB[sub].ul[Math.floor(num/3)%2]}});
 const SUBTXT={Brawler:'Attaque gagnée : relance son d6 au prochain combat.',Performer:'Défense gagnée : relance le d6 de sa prochaine capacité.',Protector:'Égalité au combat : inflige 1 PV.',Juggernaut:'Le 1er PV ne peut être perdu que par un combat.',Ranger:'Ignore les structures pour attaquer.',Flanker:'Ignore les structures pour se déplacer.',Assist:'Attaque gagnée : d3, 2-3 = soigne un allié de 1 PV.',Engineer:'Défense gagnée : d3, 2-3 = se soigne de 1 PV.'};
 
 /* Cartes renfort (extra, 1 par tour de personnage) */
@@ -425,7 +606,7 @@ function reachable(u){
   return out}
 function pathTo(u,reach,dest){const p=[];let k=KEY(dest.c,dest.r);while(k&&k!==KEY(u.c,u.r)){const n=reach.get(k);p.unshift([n.c,n.r]);k=n.prev}return p}
 function targetsFor(u,s){
-  if(s.t==='enemy')return alive(1-u.team).filter(t=>s.far?(cheb(u,t)<=s.far&&(!s.adj||freeAdj(t).length)):rangeState(u,t)===1);
+  if(s.t==='enemy')return alive(1-u.team).filter(t=>s.far?(cheb(u,t)<=s.far&&(!s.adj||freeAdj(t).length)&&(!s.adjSelf||freeAdj(u).length)):rangeState(u,t)===1);
   if(s.t==='ally')return alive(u.team).filter(t=>t===u||cheb(u,t)<=stat(u,'pre')+(isStruct(u.c,u.r)?1:0));
   if(s.t==='cell'){const o=[],cr=typeof s.cell==='function'?s.cell(u):s.cell;for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(!unitAt(c,r)&&cheb(u,{c,r})<=cr)o.push({c,r});return o}
   const rad=typeof s.rad==='function'?s.rad(u):s.rad;
@@ -539,8 +720,8 @@ function renderTop(){
   h.innerHTML=t}
 const isReady=u=>G.phase==='play'&&u.alive&&u.team===G.turnPlayer&&!u.played&&!(G.bot&&u.team===1);
 function ucHTML(u){return`<div class="uc ${G.sel===u?'sel':''} ${isReady(u)?'ready':''} ${u.played&&u.alive?'played':''} ${u.alive?'':'dead'}" data-id="${u.id}" style="--cc:${CLS[u.d.cls].c}">
-  <div class="nm">${u.d.name}<small>${u.d.sub}</small></div><div class="hp">${hearts(u)}</div>
-  <div class="st">ATK ${stat(u,'atk')} DEF ${stat(u,'def')} HAB ${stat(u,'hab')} PRE ${stat(u,'pre')}</div><div class="fx">${fxIcon(u)}${u.played&&u.alive?' ✔':''}</div></div>`}
+  <div class="nm">${u.d.name}${u.effect?` <span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span>`:''}<small>${u.d.sub}</small></div><div class="hp">${hearts(u)}</div>
+  <div class="st">ATK ${stat(u,'atk')} DEF ${stat(u,'def')} HAB ${stat(u,'hab')} PRE ${stat(u,'pre')}</div><div class="fx">${u.played&&u.alive?'✔':''}</div></div>`}
 function renderRosters(){[0,1].forEach(t=>{const us=G.units.filter(u=>u.team===t);
   $(t?'#rosterB':'#rosterW').innerHTML=`<div class="rh"><b>${TEAMS[t]}</b><span>Renforts : ${G.hand[t].length} · Ult ${G.ult[t]?'✖':'✔'}</span></div>`+us.map(ucHTML).join('')})
   document.querySelectorAll('.uc').forEach(el=>el.onclick=()=>{const u=G.units.find(x=>x.id==el.dataset.id);if(!u)return;G.cur={c:u.c,r:u.r};if(G.phase==='play'&&!G.busy&&G.mode==='idle')confirmAct()})}
@@ -548,9 +729,9 @@ function renderDock(){
   const insp=G.sel||(G.phase==='play'?unitAt(G.cur.c,G.cur.r):null),info=$('#info'),acts=$('#acts'),pips=$('#pips'),cards=$('#cards');
   if(!insp){info.innerHTML=G.phase==='place'?'<div class="abil">Place tes 4 personnages sur les cases de départ de ton camp.</div>':'<div class="abil">Déplace le curseur sur un personnage pour voir ses stats.</div>';acts.innerHTML='';pips.innerHTML='';cards.innerHTML='';return}
   const u=insp,d=u.d;
-  info.innerHTML=`<h3 style="--cc:${CLS[d.cls].c}">${d.name}<span class="chip">${CLS[d.cls].n} · ${d.sub}</span><span style="color:var(--mut);font-weight:500;font-size:12px">${TEAMS[u.team]} · ${hearts(u)} ${u.effect?EFF[u.effect.type][0]+' '+EFF[u.effect.type][1]:''}</span></h3>
+  info.innerHTML=`<h3 style="--cc:${CLS[d.cls].c}">${d.name}${u.effect?` <span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span>`:''}<span class="chip">${CLS[d.cls].n} · ${d.sub}</span><span style="color:var(--mut);font-weight:500;font-size:12px">${TEAMS[u.team]} · ${hearts(u)} ${u.effect?EFF[u.effect.type][0]+' '+EFF[u.effect.type][1]:''}</span></h3>
    <div class="stats"><span>ATK <b>${stat(u,'atk')}</b></span><span>DEF <b>${stat(u,'def')}</b></span><span>HAB <b>${stat(u,'hab')}</b></span><span>PRE <b>${stat(u,'pre')}</b></span></div>
-   <div class="abil"><b>${d.ab.n}</b> — ${d.ab.x}<br><b>Ultime · ${d.ul.n}</b> — ${d.ul.x}${G.variant?`<br><b>${d.sub}</b> — ${SUBTXT[d.sub]}`:''}</div>`;
+   <div class="abil">${d.power?`<b>Pouvoir · ${d.power}</b><br>`:''}<b>${d.ab.n}</b> — ${d.ab.x}<br><b>Ultime · ${d.ul.n}</b> — ${d.ul.x}${G.variant?`<br><b>${d.sub}</b> — ${SUBTXT[d.sub]}`:''}</div>`;
   if(G.sel!==u||G.phase!=='play'){acts.innerHTML='';pips.innerHTML='';cards.innerHTML='';return}
   const B=(k,label,cmd,on)=>{const[ok,why]=can(cmd);return`<button class="btn ${on?'on':''}" data-cmd="${cmd}" ${ok?'':'disabled'} title="${why||''}"><kbd>${k}</kbd>${label}${ok?'':` <small style="color:var(--mut)">(${why})</small>`}</button>`};
   acts.innerHTML=G.mode==='frozen'?`<button class="btn" data-cmd="thaw"><kbd>F</kbd>Briser (−1 PV)</button><button class="btn" data-cmd="end"><kbd>E</kbd>Passer</button>`:
@@ -559,7 +740,7 @@ function renderDock(){
   pips.innerHTML=`Actions : ${[0,1].map(i=>`<span class="pip ${i<G.actions?'':'off'}"></span>`).join('')}${u.freeAtk>0?` · Blitz : ${u.freeAtk} attaque(s) gratuite(s)`:''}${u.buffs.length?' · Bonus : '+u.buffs.map(b=>`${b.v>0?'+':''}${b.v} ${b.k.toUpperCase()}`).join(', '):''}`;
   const hand=G.hand[u.team];cards.innerHTML=hand.map((c,i)=>`<div class="card ${G.mode==='card'&&i===G.cardIdx?'cur':''}"><b>${c.n}</b><br>${c.x}</div>`).join('')}
 function renderBadges(){const el=$('#badges');let h='';for(const u of G.units){if(!u.alive||!u.mesh.visible)continue;const[x,y]=screenOf(u.mesh.position,1.35);
-  h+=`<div class="badge t${u.team}" style="left:${x}px;top:${y}px"><div class="fx">${fxIcon(u)}</div><div class="hp">${hearts(u)}</div><span class="nm">${u.d.name}</span></div>`}
+  h+=`<div class="badge t${u.team}" style="left:${x}px;top:${y}px"><div class="hp">${hearts(u)}</div><span class="nm">${u.effect?`<span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span> `:''}${u.d.name}</span></div>`}
   if(el._h!==h){el.innerHTML=h;el._h=h}}
 function renderKeys(){const K=[['←↑↓→ / WASD','Curseur'],['Entrée / Espace','Valider'],['Tab','Perso suivant'],['1','Déplacer'],['2','Attaquer'],['3','Capacité'],['4','Ultime (manche 2+)'],['5','Carte renfort'],['E','Fin de tour'],['Échap','Annuler'],['V','Vue plongeante/inclinée'],['[ ]','Tourner la caméra'],['0','Recentrer'],['Clic droit + glisser','Orbiter'],['Molette','Zoom'],['Maj/Molette + glisser','Déplacer'],['+ / −','Zoom'],['H','Masquer l\'aide']];
   $('#keys').innerHTML='<div class="kh"><span>Contrôles</span><kbd>H</kbd></div>'+K.map(([k,t])=>`<kbd>${k}</kbd><span>${t}</span>`).join('')}
@@ -589,7 +770,7 @@ function showPick(){const ov=$('#overlay');ov.className='on';const t=G.pickTeam,
    <div class="pgrid">${list.map((d,i)=>{const o=takenBy(d);return`<div class="pc ${i===G.pidx?'cur':''} ${mine.includes(d)?'mine':''} ${o>=0&&o!==t?'gone':''}" data-i="${i}" style="--cc:${CLS[d.cls].c}"><b>${d.name}</b><small>${d.sub} · #${String(d.num).padStart(3,'0')}</small>${st(d)}${o>=0&&o!==t?'<em>Pris</em>':''}</div>`}).join('')}</div>
    <div class="pinfo" style="--cc:${CLS[cur.cls].c}"><h3>${cur.name} <span class="chip">${CLS[cur.cls].n} · ${cur.sub}</span> <span class="stars">${'★'.repeat(cur.stars)}</span></h3>
    <div class="stats"><span>ATK <b>${cur.atk}</b></span><span>DEF <b>${cur.def}</b></span><span>HAB <b>${cur.hab}</b></span><span>PRE <b>${cur.pre}</b></span></div>
-   <div class="abil"><b>${cur.ab.n}</b> — ${cur.ab.x}<br><b>Ultime · ${cur.ul.n}</b> — ${cur.ul.x}${G.variant?`<br><b>${cur.sub}</b> — ${SUBTXT[cur.sub]}`:''}</div></div>
+   <div class="abil">${cur.power?`<b>Pouvoir · ${cur.power}</b><br>`:''}<b>${cur.ab.n}</b> — ${cur.ab.x}<br><b>Ultime · ${cur.ul.n}</b> — ${cur.ul.x}${G.variant?`<br><b>${cur.sub}</b> — ${SUBTXT[cur.sub]}`:''}</div></div>
    <div class="ovbar"><span><kbd>←↑↓→</kbd> naviguer</span><span><kbd>Tab</kbd>/<kbd>1-4</kbd> classe</span><span><kbd>Entrée</kbd> choisir</span><span><kbd>Retour</kbd> retirer</span></div></div>`;
   const g=ov.querySelector('.pgrid');g.scrollTop=prevScroll;const c=g.children[G.pidx];if(c)c.scrollIntoView({block:'nearest'});
   ov.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{G.ptab=b.dataset.c;G.pidx=0;showPick()});
