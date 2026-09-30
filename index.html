@@ -18,7 +18,8 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--
 canvas#c{position:absolute;inset:0;width:100%;height:100%;display:block;outline:none}
 #badges,#float{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .badge{position:absolute;transform:translate(-50%,-100%);text-align:center;font-size:11px;font-weight:700;letter-spacing:.04em;white-space:nowrap;text-shadow:0 1px 2px #000}
-.badge .tg{font-size:10px;padding:0 6px;border-radius:99px;margin-bottom:2px;color:#111;font-weight:700;animation:tgin .25s ease-out} .tg.atk{background:#ff6b6b} .tg.abl{background:#c48cff} .tg.ally{background:#3ee08a} @keyframes tgin{from{transform:scale(.4);opacity:0}}
+.chain{color:var(--amber);font-weight:700} .zb{position:absolute;transform:translate(-50%,-50%);font-size:12px;font-weight:700;text-shadow:0 1px 3px #000;background:#0009;border-radius:99px;padding:0 6px}
+.badge .tg{font-size:10px;padding:0 6px;border-radius:99px;margin-bottom:2px;color:#111;font-weight:700;animation:tgin .25s ease-out} .tg.atk{background:#ff6b6b} .tg.warn{background:#ffa02e} .tg.abl{background:#c48cff} .tg.ally{background:#3ee08a} @keyframes tgin{from{transform:scale(.4);opacity:0}}
 .badge .hp{font-size:12px;letter-spacing:1px;color:#ff6b6b}
 .badge .hp i{font-style:normal;color:#ffffff40}
 .badge .nm{display:inline-block;padding:0 5px;border-radius:3px;background:#0009;color:#fff}
@@ -157,6 +158,8 @@ const CENTER=[[3,3],[4,3],[3,4],[4,4]];
 const CLS={A:{n:'Attaque',c:'#ee5b4b',h:0xee5b4b},D:{n:'Défense',c:'#4a8cf0',h:0x4a8cf0},T:{n:'Technique',c:'#3fc48a',h:0x3fc48a},S:{n:'Soutien',c:'#efbf45',h:0xefbf45}};
 const ORDER=['A','D','T','S'];
 const EFF={burn:['🔥','Brûlé'],toxic:['☣️','Toxique'],stun:['💫','Assommé'],numb:['🩹','Engourdi'],disrupt:['🌌','Bouleversement'],jam:['📡','Brouillage'],frozen:['🧊','Gelé']};
+const ZK={fire:{n:'Feu',col:0xff7a2b,ic:'🔥',eff:'burn'},gas:{n:'Gaz toxique',col:0x8be04a,ic:'☣️',eff:'toxic'},slime:{n:'Slime',col:0xd9a0ff,ic:'🟣',eff:'numb'},smoke:{n:'Fumée',col:0x6ad0ff,ic:'🌫️',eff:'jam'},
+  storm:{n:'Tempête',col:0x8a6bff,ic:'⛈️',eff:'disrupt'},lava:{n:'Lave',col:0xff4a1a,ic:'🌋',eff:'burn',dmg:1},ice:{n:'Glace',col:0xaee6ff,ic:'❄️',eff:'numb'},heal:{n:'Prairie de soin',col:0x5fe0a5,ic:'🌿',heal:1,ally:true}};
 const isStruct=(c,r)=>STRUCT.has(KEY(c,r));
 const d6=()=>1+Math.floor(Math.random()*6), d3=()=>1+Math.floor(Math.random()*3);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -254,6 +257,43 @@ const B={
  blitz:n=>SELF(n,'Cette attaque et la suivante ne coûtent aucune action.',async u=>{u.freeAtk=2;pop(u,'ENCHAÎNEMENT','#ff9a5a')}),
  steal:(n,dm=0)=>TGT(n,`Cible à portée : retire ses effets et bonus${dm?`, −${dm} PV`:''} ; le lanceur gagne +1 ATK et +1 DEF ce tour.`,async(u,t)=>{t.effect=null;t.buffs=t.buffs.filter(b=>b.v<0);addBuff(u,'atk',1,'self',u);addBuff(u,'def',1,'self',u);if(dm)await dmg(t,dm,u);refresh()})
 };
+/* ===== attaques créatives : lignes, zones, cibles multiples, minuteries, combos, chaîne ===== */
+const AFF_TXT={enemies:'ennemis',all:'personnages (alliés compris)',allies:'alliés'};
+async function lineFx(u,cells,col){faceTo(u,cells[cells.length-1]);for(const ce of cells){burst(cellPos(ce.c,ce.r,.5),col,5,{speed:1.2,up:.8,size:.1,life:.4,g:2});await sleep(45)}}
+async function zoneFx(cells,col,c,r){ringFx(cellPos(c,r),col,1.2+cells.length*.05,.5);for(const ce of cells)burst(cellPos(ce.c,ce.r,.3),col,4,{speed:1.5,up:2.5,size:.11,life:.5});shakeCam(.18);await sleep(250)}
+const ECOL=e=>(e&&FXCOL[e])||0xffd27a;
+const fxList=(dm,e)=>[dm?`−${dm} PV`:'',e?effTxt(e):''].filter(Boolean).join(' et ')||'effet';
+Object.assign(B,{
+ line:(n,len,dm=0,e=null,o={})=>({n,t:'line',len,diag:!!o.diag,aff:o.aff||'enemies',x:`Ligne de ${len} cases${o.diag?' (8 directions)':''} : ${fxList(dm,e)} à tous les ${AFF_TXT[o.aff||'enemies']} alignés.`,
+   run:async(u,tg)=>{await lineFx(u,tg.cells,ECOL(e));for(const x of tg.units){if(dm)await dmg(x,dm,u);if(e&&x.alive)await addEff(x,e,u)}}}),
+ zone:(n,range,rad,e=null,dm=0,o={})=>({n,t:'zone',range,rad,shape:o.shape||'square',aff:o.aff||'enemies',ff:!!o.ff,
+   x:`Zone ${o.shape==='cross'?'en croix (rayon '+rad+')':(2*rad+1)+'×'+(2*rad+1)} centrée à ≤${range} cases : ${fxList(dm,e)} à tous les personnages touchés${o.ff?' (alliés compris !)':' ennemis'}.`,
+   run:async(u,tg)=>{await zoneFx(tg.cells,ECOL(e),tg.c,tg.r);for(const x of tg.units){if(dm)await dmg(x,dm,u);if(e&&x.alive)await addEff(x,e,u)}}}),
+ hazard:(n,range,rad,kind,ttl,o={})=>({n,t:'zone',range,rad,shape:o.shape||'square',aff:'enemies',empty:true,hazard:true,
+   x:`Crée une zone ${ZK[kind].n} ${o.shape==='cross'?'en croix':(2*rad+1)+'×'+(2*rad+1)} (centre à ≤${range} cases) pendant ${ttl} manches : ${ZK[kind].heal?'soigne les alliés':effTxt(ZK[kind].eff)+(ZK[kind].dmg?' et −'+ZK[kind].dmg+' PV':'')+' aux ennemis'} qui y entrent ou y restent.`,
+   run:async(u,tg)=>{await zoneFx(tg.cells,ZK[kind].col,tg.c,tg.r);await addZone(u,tg.cells,kind,ttl)}}),
+ multi:(n,k,e=null,dm=0)=>({n,t:'multi',k,aff:'enemies',x:`Jusqu'à ${k} ennemis à portée (choisis-les un à un) : ${fxList(dm,e)}.`,
+   run:async(u,l)=>{for(const x of l){faceTo(u,x);if(dm)await dmg(x,dm,u);if(e&&x.alive)await addEff(x,e,u)}}}),
+ multiBuf:(n,k,parts,d='turn')=>({n,t:'multi',k,aff:'allies',x:`Jusqu'à ${k} alliés à portée : ${parts.map(([kk,v])=>bTxt(kk,v,d)).join(', ')}.`,
+   run:async(u,l)=>{for(const x of l)for(const[kk,v]of parts)addBuff(x,kk,v,d,u)}}),
+ multiHeal:(n,k)=>({n,t:'multi',k,aff:'allies',x:`Jusqu'à ${k} alliés à portée : +1 PV et effets retirés.`,run:async(u,l)=>{for(const x of l){heal(x,1);cleanse(x);await sleep(120)}}}),
+ bomb:(n,dm,rounds)=>TGT(n,`Cible à portée : explose ${rounds<=1?'à la fin de la manche':'à la fin de la '+rounds+'ᵉ manche (compte comprise)'} (−${dm} PV, −1 PV aux personnages adjacents, alliés compris).`,
+   async(u,t)=>{t.timers.push({kind:'bomb',left:rounds,dmg:dm,src:u,name:n});pop(t,'💣 '+rounds,'#ffa02e');ringFx(t.mesh.position,0xffa02e,1.2,.4);refresh()}),
+ hot:(n,amt,rounds)=>({n,t:'ally',x:`Allié à portée (ou soi) : +${amt} PV à la fin de chacune des ${rounds} prochaines manches.`,
+   run:async(u,t)=>{t.timers.push({kind:'hot',left:rounds,amt,name:n,src:u});pop(t,'🌱 '+rounds,'#5fe0a5');ringFx(t.mesh.position,0x5fe0a5,1.2,.4);refresh()}}),
+ repair:n=>({n,t:'ally',x:'Allié à portée (ou soi) : +1 PV, effets retirés et +1 DEF jusqu\'au prochain tour.',run:async(u,t)=>{heal(t,1);cleanse(t);addBuff(t,'def',1,'turn',u)}}),
+ revive:n=>({n,t:'none',aoe:'self',rad:0,need:u=>deadAllies(u).length&&freeAdj(u).length,x:'Ressuscite un allié K.O. (une fois chacun) avec 2 PV sur une case libre adjacente ; il rejoue dès la manche suivante.',
+   run:async u=>{const d=deadAllies(u).pop(),c=freeAdj(u)[0];d.alive=true;d.revived=true;d.hp=2;d.c=c.c;d.r=c.r;d.effect=null;d.buffs=[];d.timers=[];d.played=true;d.mesh.visible=true;d.mesh.rotation.y=d.faceY;d.mesh.position.copy(cellPos(c.c,c.r));
+     burst(chest(d),0xfff2a0,30,{speed:2.4,up:4,g:-2,size:.14,life:1});ringFx(d.mesh.position,0xfff2a0,2.2,.7);await tween(.5,k=>{const e=ease.bounce(k);d.mesh.scale.set(e,e,e)});d.mesh.scale.setScalar(1);log(`✨ ${d.d.name} revient au combat avec 2 PV`);refresh()}}),
+ exploit:(n,needs,base,bonus,o={})=>TGT(n,`Cible à portée : −${base} PV ; combo : −${base+bonus} PV et consomme l'état si la cible est ${needs.map(k=>k==='mark'?'marquée':EFF[k][1]).join(' / ')}.`,async(u,t)=>{
+   const hit=(t.effect&&needs.includes(t.effect.type))||(needs.includes('mark')&&t.buffs.some(b=>b.k==='def'&&b.v<0));
+   if(hit){pop(t,'COMBO !','#ffd27a');log(`<b>Combo</b> sur ${t.d.name}`);ringFx(t.mesh.position,0xffd27a,1.6,.5);if(t.effect&&needs.includes(t.effect.type))t.effect=null;t.buffs=t.buffs.filter(b=>b.v>=0);await dmg(t,base+bonus,u)}else await dmg(t,base,u)},o),
+ combo:(n,k,o={})=>TGT(n,`Cible à portée : enchaîne jusqu'à ${k} combats ; chaque touche donne +1 ATK au suivant, s'arrête à la première parade.`,async(u,t)=>{
+   for(let i=0;i<k&&t.alive;i++){const r=await combat(u,t);if(r!=='hit')break;addBuff(u,'atk',1,'self',u);pop(u,`Combo ×${i+1}`,'#ffd27a')}},o),
+ finisher:(n,base,o={})=>TGT(n,`Cible ${o.far?'à ≤'+o.far+' cases':'à portée'} : −${base} PV, +1 PV par capacité déjà lancée par l'équipe cette manche (chaîne).`,async(u,t)=>{const bonus=G.chain[u.team];pop(t,`Chaîne ×${bonus}`,'#ffd27a');await dmg(t,base+bonus,u)},o),
+ link:n=>SELF(n,'Amorce la chaîne : +2 à la chaîne d\'équipe (les coups de grâce infligent plus).',async u=>{G.chain[u.team]+=1;pop(u,'⛓ +2','#ffd27a')})
+});
+
 const PRE2=PRE1;
 /* capacité à jet de dé : réussit si le dé tombe dans [lo,hi] ; bad = effet de contrecoup sur un 1 */
 const DIE=(spec,lo,hi=6,o={})=>{const die=o.die||6,rg=hi>=die?`${lo}+`:`${lo}-${hi}`;
@@ -282,54 +322,54 @@ const AN=(a,t)=>['Zoologique · '+a,...TRAIT[t](a)];
 const A2=(a,t1,b,t2)=>['Zoologique · '+a+(b!==a?' / '+b:''),TRAIT[t1](a)[0],TRAIT[t2](b)[1]];
 /* numéro de carte : [pouvoir, capacité, ultime] */
 const POW={
- 0:['Anti-matière',B.hit('Rayon d\'anti-matière',1),B.aoe('Annihilation',null,PRE1,1)],
- 1:['Foudre olympienne',B.eff('Foudre','stun',4),B.aoe('Fureur de Zeus','stun',3,1)],
- 2:['Reine de l\'Olympe',B.allyAoe('Voile protecteur',[['def',1]],2),B.aoe('Jalousie divine','disrupt',3)],
- 3:['Mers & tempêtes',B.aoe('Marée','numb',PRE1),B.aoe('Raz-de-marée',null,4,1)],
+ 0:['Anti-matière',B.hit('Rayon d\'anti-matière',1),B.zone('Annihilation',5,1,null,2,{ff:true})],
+ 1:['Foudre olympienne',B.line('Foudre en ligne',6,0,'stun'),B.aoe('Fureur de Zeus','stun',3,1)],
+ 2:['Reine de l\'Olympe',B.multiHeal('Drones de soin',2),B.aoe('Jalousie divine','disrupt',3)],
+ 3:['Mers & tempêtes',B.line('Jet marin',5,0,'numb'),B.zone('Raz-de-marée',4,2,null,1)],
  4:['Royaume des morts',B.drain('Âmes captives'),DIE(B.hit('Jugement dernier',3,{far:6}),4)],
  5:['Stratégie divine',B.self('Formation en tortue',[['def',2]]),B.allyAoe('Plan de bataille',[['atk',1],['def',1]],99)],
- 6:['Charme',B.eff('Charme','numb'),B.healAoe('Baiser d\'amour')],
- 7:['Guerre',B.self('Soif de sang',[['atk',2]]),B.aoe('Cri de guerre','stun',PRE1,1)],
- 8:['Lumière & musique',B.heal('Chant de guérison'),B.healAoe('Hymne solaire')],
- 9:['Moissons',B.eff('Racines','numb'),B.aoe('Famine','toxic',PRE1)],
+ 6:['Charme',B.multiHeal('Baiser guérisseur',2),B.healAoe('Étreinte d\'amour')],
+ 7:['Guerre',B.combo('Fureur guerrière',3),B.aoe('Cri de guerre','stun',PRE1,1)],
+ 8:['Lumière & musique',B.multiHeal('Chant de guérison',2),B.revive('Résurrection solaire')],
+ 9:['Moissons',B.line('Ronces rampantes',5,0,'numb'),B.aoe('Famine','toxic',PRE1)],
  10:['Messager divin',B.dash('Sandales ailées',4),B.act('Course du messager',1)],
- 11:['Ivresse',B.eff('Ivresse','disrupt'),B.aoe('Bacchanale','disrupt',3,1)],
+ 11:['Ivresse',B.combo('Danse enivrée',2),B.aoe('Bacchanale','disrupt',3,1)],
  12:['Récoltes',B.dash('Pas de blé',3,['hab',1]),B.allyAoe('Abondance',[['hab',2]],99,'round')],
- 13:['Forge divine',B.eff('Fer rouge','burn'),B.allyAoe('Armes forgées',[['atk',1],['def',1]],99,'round')],
+ 13:['Forge divine',B.repair('Réparation'),B.allyAoe('Armes forgées',[['atk',1],['def',1]],99,'round')],
  14:AN('Loup','pack'),
- 15:['Air',B.eff('Rafale','numb'),B.aoe('Tornade','stun',3)],
+ 15:['Air',B.line('Rafale perçante',6,0,'numb'),B.aoe('Tornade','stun',3)],
  16:['Logique inversée',DIE(B.swap('Absurdité'),3),B.aoe('Paradoxe','disrupt',PRE1)],
- 17:['Mouvement',B.ally('Accélération','hab',2,'round'),B.aoeDeb('Ralentissement général','hab',-2,99)],
+ 17:['Mouvement',B.multiBuf('Accélération collective',2,[['hab',2]],'round'),B.aoeDeb('Ralentissement général','hab',-2,99)],
  18:['Magnétisme',B.pull('Aimant'),B.aoe('Champ magnétique','stun',3)],
- 19:['Gaz',B.aoe('Nuage de gaz','jam',2),B.aoe('Gaz toxique','toxic',3)],
- 20:['Slime',B.eff('Bave collante','numb'),B.aoe('Marée visqueuse','numb',PRE1,1)],
- 21:['Électricité',B.eff('Décharge','stun',4),B.aoe('Surtension','stun',3,1)],
+ 19:['Gaz',B.hazard('Nuage toxique',4,1,'gas',2),B.hazard('Grande nappe de gaz',4,2,'gas',3)],
+ 20:['Slime',B.hazard('Flaque de slime',3,1,'slime',2),B.aoe('Marée visqueuse','numb',PRE1,1)],
+ 21:['Électricité',B.line('Arc électrique',5,1),B.zone('Orage',5,1,'stun',1)],
  23:['Gravité',B.eff('Gravité accrue','numb'),B.aoe('Singularité','numb',4,1)],
- 25:['Carcajou + Énergie cinétique',TRAIT.bite('Carcajou')[0],B.hit('Impact différé',2,{far:5})],
- 30:['Temps',B.act('Accélération temporelle',1),DIE(B.act('Arrêt du temps',2),3)],
+ 25:['Carcajou + Énergie cinétique',TRAIT.bite('Carcajou')[0],B.finisher('Impact cinétique',1,{far:5})],
+ 30:['Temps',B.bomb('Bombe temporelle',2,2),DIE(B.act('Arrêt du temps',2),3)],
  32:['Chance',DIE(B.ally('Coup de chance','def',2),3,6,{bad:async u=>{addBuff(u,'def',-1,'turn',u);pop(u,'Malchance','#f88')}}),B.allyAoe('Jour de veine',[['atk',1],['def',1]],99,'round')],
  35:AN('Hippopotame','charge'),
  40:['Invisibilité',B.self('Disparition',[['def',2]]),B.strike('Frappe invisible',5,2)],
  41:['Seiche + Éléphant d\'Afrique',TRAIT.spit('Seiche')[0],TRAIT.tank('Éléphant')[1]],
- 51:['Virus',B.eff('Infection','toxic'),B.aoe('Pandémie','toxic',3)],
- 52:['Lames',B.hit('Coup de lame',1),B.aoe('Tourbillon de lames',null,PRE1,1)],
- 53:['Période',B.heal('Rajeunissement'),B.aoeDeb('Retour à l\'enfance','atk',-1,4)],
- 54:['Tournis',B.aoe('Tournis','numb',1),B.aoe('Cyclone de membres',null,PRE1,1)],
+ 51:['Virus',B.bomb('Incubation virale',2,2),B.aoe('Pandémie','toxic',3)],
+ 52:['Lames',B.line('Onde tranchante',4,1,null,{diag:true}),B.zone('Tourbillon de lames',3,2,null,1,{shape:'cross'})],
+ 53:['Période',B.hot('Rajeunissement',1,2),B.aoeDeb('Retour à l\'enfance','atk',-1,4)],
+ 54:['Tournis',B.combo('Enchaînement de coups',3),B.aoe('Cyclone de membres',null,PRE1,1)],
  62:['Perméabilité',B.dash('Traverser les murs',3),B.strike('Surgir de la paroi',4,1)],
- 63:['IA',DIE(B.eff('Piratage','jam'),2),B.aoe('Ransomware','disrupt',3)],
+ 63:['IA',DIE(B.multi('Botnet',3,'jam'),2),B.aoe('Ransomware','disrupt',3)],
  66:AN('Suricate','support'),
  67:['Contraire',B.swap('Inversion'),B.aoeDeb('Contre-pied','def',-1,99)],
  73:['Espace',B.dash('Téléportation',5),B.strike('Distorsion',6,1)],
  74:['Portail',DIE(B.swap('Portails jumeaux',5),2),B.dash('Grand portail',6)],
- 84:AN('Veuve noire','venom'),
+ 84:['Zoologique · Veuve noire',B.exploit('Piqûre fatale',['toxic'],1,2),TRAIT.venom('Veuve noire')[1]],
  87:AN('Rhinocéros','charge'),
  95:['Élastique',B.pull('Bras élastique'),B.aoe('Claque élastique','stun',PRE1)],
- 106:['Personnalité IA',B.ally('Programmation','atk',1),B.allyAoe('Mise à jour',[['atk',1]],99,'round')],
+ 106:['Personnalité IA',B.link('Synchronisation'),B.allyAoe('Mise à jour',[['atk',1]],99,'round')],
  107:A2('Rainette','fast','Rainette','venom'),
- 108:['Reflets',B.dash('Saut de reflet',3),B.strike('Coup de miroir',6,2)],
+ 108:['Reflets',B.multi('Volée de reflets',2,null,1),B.finisher('Reflet final',1,{far:6})],
  109:['Cryptides',DIE(B.eff('Cauchemar','disrupt'),2),B.aoe('Terreur','stun',3)],
  110:AN('Panda','tank'),
- 111:AN('Panthère noire','stealth'),
+ 111:['Zoologique · Panthère noire',B.exploit('Mise à mort',['stun','numb','frozen'],1,2),TRAIT.stealth('Panthère noire')[1]],
  118:['Effacement',DIE(B.eff('Effacer un pouvoir','disrupt'),3),B.aoe('Page blanche','disrupt',5)],
  119:AN('Lion','bite'),
  120:['Piques',PAS('Hérissement','Quand il est attaqué, d6 5+ : l\'attaquant perd 1 PV.',{thorns:5}),B.aoe('Explosion de piques',null,1,1)],
@@ -339,55 +379,55 @@ const POW={
  140:['Sable',B.aoe('Sable dans les yeux','jam',2),B.aoe('Tempête de sable','numb',4,1)],
  141:AN('Morse','tank'),
  143:AN('Léopard','stealth'),
- 144:['Boue',B.aoe('Bourbier','numb',2),B.aoe('Glissement de terrain','stun',PRE1)],
- 152:['Plante',B.heal('Bourgeons'),B.healAoe('Floraison')],
+ 144:['Boue',B.hazard('Bourbier',3,1,'slime',2),B.aoe('Glissement de terrain','stun',PRE1)],
+ 152:['Plante',B.hot('Graine de vie',1,3),B.revive('Renaissance végétale')],
  154:AN('Anémone','venom'),
  155:['Écorce',B.self('Armure d\'écorce',[['def',2]]),B.allyAoe('Forêt protectrice',[['def',1]],99)],
  157:['Pierre',B.self('Poing de pierre',[['atk',1],['def',1]]),B.aoe('Éboulement','stun',PRE1,1)],
  165:['Métamorphose',B.dash('Forme de fauve',3,['atk',1]),B.self('Forme bestiale',[['atk',2],['hab',1]])],
  166:['Ténèbres',DIE(B.eff('Voile d\'ombre','disrupt'),2),B.aoe('Nuit totale','disrupt',4,1)],
  167:['Ombre',B.dash('Pas d\'ombre',3),B.strike('Lame d\'ombre',6,2)],
- 176:['Trou noir',B.pull('Aspiration'),B.aoe('Horizon des événements',null,3,1)],
+ 176:['Trou noir',B.pull('Aspiration'),B.zone('Horizon des événements',5,2,'numb',1,{ff:true})],
  177:['Vol de pouvoirs',B.steal('Pickpocket'),B.steal('Casse du siècle',1)],
  178:['Destruction',DIE(B.hit('Poussière',1),3),DIE(B.hit('Anéantissement',3),4)],
- 179:['Ronces',B.eff('Ronces','numb'),B.aoe('Forêt de ronces','numb',PRE1,1)],
+ 179:['Ronces',B.line('Ronces',4,0,'numb'),B.aoe('Forêt de ronces','numb',PRE1,1)],
  188:AN('Renard','stealth'),
  189:['Rembobinage',B.heal('Rembobinage'),DIE(B.act('Retour en arrière',1),3)],
  190:['Métal',PAS('Corps métallique','+1 DEF, immunisé à la Brûlure.',{immune:['burn'],stat:(u,k)=>k==='def'?1:0}),B.self('Armure lourde',[['atk',1],['def',2]],1)],
- 200:['Séisme',B.aoe('Secousse','numb',PRE1),B.aoe('Grand séisme','stun',4,1)],
- 201:['Magma',PAS('Peau de lave','Immunisé à la Brûlure, +1 ATK.',{immune:['burn'],stat:(u,k)=>k==='atk'?1:0}),B.aoe('Éruption','burn',PRE1,1)],
+ 200:['Séisme',B.line('Fissure',6,0,'numb'),B.zone('Grand séisme',5,2,'stun',1)],
+ 201:['Magma',PAS('Peau de lave','Immunisé à la Brûlure, +1 ATK.',{immune:['burn'],stat:(u,k)=>k==='atk'?1:0}),B.hazard('Coulée de lave',5,1,'lava',3)],
  202:['Bête',PAS('Monstre craint','+2 ATK quand il a 2 PV ou moins.',{stat:(u,k)=>k==='atk'&&u.hp<=2?2:0}),B.aoe('Terreur pure','stun',3,1)],
- 203:['Climat',B.aoe('Brouillard','jam',3),B.aoe('Tempête','stun',4,1)],
+ 203:['Climat',B.hazard('Tempête persistante',4,1,'storm',2),B.zone('Foudre du ciel',5,1,'stun',1)],
  213:AN('Pygargue à tête blanche','flight'),
- 214:['Conscience',B.ally('Insuffler la vie','atk',1),B.allyAoe('Éveil des objets',[['atk',1],['def',1]],99,'round')],
+ 214:['Conscience',B.repair('Réparation de conscience'),B.allyAoe('Éveil des objets',[['atk',1],['def',1]],99,'round')],
  215:AN('Manchot royal','tank'),
  218:['Roue',PAS('Roues','+1 HAB en permanence.',{stat:(u,k)=>k==='hab'?1:0}),B.strike('Écrasement à roues',5,1)],
- 222:['Transmutation',B.heal('Transmutation'),B.healAoe('Alchimie')],
- 223:['Forme arme',B.self('Forme d\'arme',[['atk',2]]),B.blitz('Lame vivante')],
+ 222:['Transmutation',B.repair('Transmutation curative'),B.healAoe('Alchimie')],
+ 223:['Forme arme',B.combo('Danse de lames',3),B.blitz('Lame vivante')],
  234:['Air comprimé + Kératine',B.dash('Propulsion d\'air',3),B.strike('Griffes de kératine',4,2)],
- 235:['Vœu',DIE(B.heal('Étoile filante'),2,3,{die:3}),B.healAoe('Pluie d\'étoiles')],
- 236:AN('Paon','display'),
+ 235:['Vœu',DIE(B.heal('Étoile filante'),2,3,{die:3}),B.revive('Vœu de résurrection')],
+ 236:['Zoologique · Paon',B.multi('Parade',2,'disrupt'),TRAIT.display('Paon')[1]],
  245:['Poison',PAS('Sang toxique','Immunisé au Poison.',{immune:['toxic'],stat:(u,k)=>k==='def'?1:0}),B.aoe('Nuage empoisonné','toxic',PRE1,1)],
  246:['Faufilement',PAS('Corps de papier','Immunisé à l\'Engourdissement, +1 HAB.',{immune:['numb'],stat:(u,k)=>k==='hab'?1:0}),B.strike('Coup de papier',5,2)],
- 247:['Blueprint',B.eff('Piège fabriqué','numb'),B.aoe('Champ de mines','stun',3,1)],
+ 247:['Blueprint',B.multi('Pièges fabriqués',2,'numb'),B.aoe('Champ de mines','stun',3,1)],
  257:['Nageoire + Vitesse',B.dash('Coup de nageoire',3,['atk',1]),B.blitz('Vitesse maximale')],
  258:['Rebond',B.self('Bond',[['hab',2],['def',1]]),B.aoe('Sol rebondissant','numb',3)],
  274:['Aura',PAS('Aura','Lui et les alliés à ≤2 cases : +1 ATK en permanence.',{aura:{rad:2,k:'atk',v:1}}),B.allyAoe('Aura maximale',[['atk',1],['def',1],['hab',1]],99,'round')],
  275:['Champ de force',PAS('Champ de force','Lui et les alliés à ≤1 case : +1 DEF en permanence.',{aura:{rad:1,k:'def',v:1}}),B.allyAoe('Dôme',[['def',2]],99)],
  276:AN('Iguane','bite'),
- 277:['Dédoublement',B.blitz('Bras multiples'),B.act('Corps dédoublé',1)],
+ 277:['Dédoublement',B.combo('Bras multiples',3),B.act('Corps dédoublé',1)],
  278:['Psychokinésie',B.pull('Lévitation'),B.aoe('Tempête psychique','stun',4)],
  279:['Glace',PAS('Corps de givre','Immunisé au Gel et à l\'Engourdissement.',{immune:['frozen','numb']}),DIE(B.eff('Prison de glace','frozen'),3)],
  280:['Ondes physiques',B.aoe('Onde de choc','numb',2),B.aoe('Onde dévastatrice','stun',4,1)],
  281:['Lynx + Subtilisation',TRAIT.stealth('Lynx')[0],B.steal('Subtilisation')],
  288:['Barrière',B.allyAoe('Barrière',[['def',2]],1),B.healAoe('Mur de soin')],
- 290:['Éclosion',B.heal('Éclosion revigorante'),B.healAoe('Nuée de bourgeons')],
+ 290:['Éclosion',B.hot('Éclosion lente',1,2),B.healAoe('Nuée de bourgeons')],
  292:['Régénération',PAS('Régénération','Récupère 1 PV à la fin de chaque manche.',{regen:1}),B.self('Renaissance',[['def',1]],2)],
- 300:['Eau',B.aoe('Vague','numb',2),B.aoe('Déferlante',null,4,1)],
+ 300:['Eau',B.line('Jet d\'eau',5,0,'numb'),B.zone('Déferlante',4,2,null,1,{shape:'cross'})],
  301:['Respiration',B.dash('Plongée',3),B.strike('Assaut sous-marin',4,1)],
  302:AN('Orque','bite'),
  306:AN('Ours polaire','tank'),
- 313:['Astéroïdes',B.hit('Météorite',1),B.aoe('Pluie d\'astéroïdes',null,4,1)],
+ 313:['Astéroïdes',B.zone('Météorite',5,1,null,1),B.zone('Pluie d\'astéroïdes',6,2,null,1,{ff:true})],
  314:['Esprit',B.swap('Échange d\'esprit'),DIE(B.eff('Possession','frozen'),3)],
  315:['Manipulation mentale',B.eff('Suggestion','jam'),DIE(B.eff('Contrôle mental','frozen'),3)],
  323:['Dragon de Komodo + Ailes',TRAIT.venom('Komodo')[0],TRAIT.flight('Ailes')[1]],
@@ -395,22 +435,22 @@ const POW={
  325:['Buffle + Durcissement',TRAIT.charge('Buffle')[0],B.self('Corps invincible',[['atk',1],['def',3]])],
  326:['Singe capucin + Portail',TRAIT.fast('Capucin')[0],B.dash('Portails communicants',6)],
  334:AN('Requin blanc','bite'),
- 335:AN('Scorpion','venom'),
- 336:['Fumée',B.aoe('Écran de fumée','jam',2),B.aoe('Nuage suffocant','disrupt',4)],
+ 335:['Zoologique · Scorpion',B.exploit('Dard',['toxic','numb'],1,2),TRAIT.venom('Scorpion')[1]],
+ 336:['Fumée',B.hazard('Écran de fumée',4,1,'smoke',2),B.aoe('Nuage suffocant','disrupt',4)],
  337:AN('Mandrill','pack'),
- 347:['Acide',B.deb('Corrosion','def',-1),B.aoe('Pluie acide',null,4,1)],
+ 347:['Acide',B.exploit('Corrosion sur plaie',['mark','numb'],1,2),B.aoe('Pluie acide',null,4,1)],
  348:AN('Piranha','bite'),
  349:['Rêves',B.eff('Somnolence','numb'),DIE(B.eff('Sommeil profond','frozen'),3)],
  350:['Forme maxi',B.self('Croissance',[['atk',2],['def',1]]),B.aoe('Piétinement de géant','stun',PRE1,1)],
  351:['État',B.eff('Solidification','numb'),B.aoe('Changement d\'état','stun',PRE1)],
  360:['Lumière',B.eff('Éblouissement','disrupt'),B.aoe('Éclat solaire','disrupt',4,1)],
- 361:['Télékinésie',B.pull('Saisie télékinétique'),B.hit('Projectile télékinétique',2,{far:6})],
+ 361:['Télékinésie',B.pull('Saisie télékinétique'),B.finisher('Coup de grâce psychique',2,{far:6})],
  362:AN('Varan','venom'),
  363:['Ailes',B.dash('Battement d\'ailes',4),B.strike('Piqué',5,1)],
  364:AN('Coati','fast'),
  365:['Durcissement',PAS('Peau durcie','+1 DEF en permanence.',{stat:(u,k)=>k==='def'?1:0}),B.self('Invincible',[['atk',1],['def',3]])],
  373:['Muscles',PAS('Muscles','+1 ATK en permanence.',{stat:(u,k)=>k==='atk'?1:0}),B.blitz('Déchaînement')],
- 374:['Feu',PAS('Corps ardent','Immunisé à la Brûlure.',{immune:['burn']}),B.aoe('Brasier','burn',PRE1,1)],
+ 374:['Feu',PAS('Corps ardent','Immunisé à la Brûlure.',{immune:['burn']}),B.hazard('Mur de flammes',5,2,'fire',2,{shape:'cross'})],
  375:['Réalité',B.dash('Copier-coller',4),DIE(B.act('Annuler',2),3)],
  376:AN('Cerf','charge')
 };
@@ -418,7 +458,7 @@ const RAW=[[0,"Néo","Performer",3,4,2,3,5],[1,"Zeus","Brawler",4,3,3,2,5],[2,"H
 const CHARS=RAW.map(([num,name,sub,atk,def,hab,pre,stars])=>{const p=POW[num];
   return{id:'c'+num,num,name,sub,cls:ROLE_CLS[sub],atk,def,hab,pre,stars,power:p?p[0]:null,
   ab:p?p[1]:LIB[sub].ab[num%3],ul:p?p[2]:LIB[sub].ul[Math.floor(num/3)%2]}});
-const SUBTXT={Brawler:'Attaque gagnée : relance son d6 au prochain combat.',Performer:'Défense gagnée : relance le d6 de sa prochaine capacité.',Protector:'Égalité au combat : inflige 1 PV.',Juggernaut:'Le 1er PV ne peut être perdu que par un combat.',Ranger:'Ignore les structures pour attaquer.',Flanker:'Ignore les structures pour se déplacer.',Assist:'Attaque gagnée : d3, 2-3 = soigne un allié de 1 PV.',Engineer:'Défense gagnée : d3, 2-3 = se soigne de 1 PV.'};
+const SUBTXT={Brawler:'Attaque gagnée : relance son d6 au prochain combat.',Performer:'Défense gagnée : relance le d6 de sa prochaine capacité.',Protector:'Égalité au combat : inflige 1 PV.',Juggernaut:'Le 1er PV ne peut être perdu que par un combat.',Ranger:'Ignore les structures pour attaquer.',Flanker:'Ignore les structures pour se déplacer.',Assist:'Attaque gagnée : d3, 2-3 = soigne un allié de 1 PV. Fin de manche : soigne 1 PV l\'allié blessé le plus proche (≤2 cases). Action Soigner : +1 PV et retire l\'effet.',Engineer:'Défense gagnée : d3, 2-3 = se soigne de 1 PV. Action Soigner : +1 PV et +1 DEF (réparation).'};
 
 /* Cartes renfort (extra, 1 par tour de personnage) */
 const REIN=[
@@ -431,7 +471,7 @@ const REIN=[
 const newDeck=()=>shuffle([...REIN,...REIN].map(c=>({...c})));
 
 /* ============ ÉTAT ============ */
-const G={budget:14,bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,phase:'menu',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
+const G={zones:[],chain:[0,0],multi:[],pv:{hl:new Map(),mark:new Map()},budget:14,bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,phase:'menu',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
   cur:{c:3,r:6},hl:new Map(),solo:new Set(),token:null,hand:[[],[]],deck:[newDeck(),newDeck()],ult:[false,false],
   picks:[[],[]],dstep:0,dsel:0,pl:0,cardIdx:0,nid:1,over:null};
 const alive=t=>G.units.filter(u=>u.alive&&u.team===t);
@@ -492,7 +532,7 @@ for(let r=0;r<N;r++)for(let c=0;c<N;c++){
   const m=new THREE.Mesh(new THREE.PlaneGeometry(0.86,0.86),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false}));
   m.rotation.x=-Math.PI/2;m.position.set(c-3.5,(isStruct(c,r)?0.53:0.02),r-3.5);scene.add(m);hlMeshes[KEY(c,r)]=m}
 const HLC={rngA:[0xff4d4d,.14],rngB:[0xb26bff,.16],move:[0x4aa3ff,.5],atk:[0xff4d4d,.55],abl:[0xb26bff,.55],ally:[0x3ee08a,.55],place:[0xffd24a,.5]};
-function paintHL(){const pl=.8+.2*Math.sin(performance.now()/220);for(const k in hlMeshes){const t=G.hl.get(k),m=hlMeshes[k].material;if(t){m.color.setHex(HLC[t][0]);m.opacity=HLC[t][1]*pl}else m.opacity=0}}
+function paintHL(){const pl=.8+.2*Math.sin(performance.now()/220);for(const k in hlMeshes){const t=G.pv.hl.get(k)||G.hl.get(k),m=hlMeshes[k].material;if(t){m.color.setHex(HLC[t][0]);m.opacity=HLC[t][1]*pl}else m.opacity=0}}
 // curseur + anneau de sélection
 const frameGeo=new THREE.RingGeometry(0.62,0.72,4,1);frameGeo.rotateZ(Math.PI/4);frameGeo.rotateX(-Math.PI/2);
 const cursor=new THREE.Mesh(frameGeo,new THREE.MeshBasicMaterial({color:0xffb42e,side:THREE.DoubleSide,depthTest:false}));cursor.renderOrder=5;scene.add(cursor);
@@ -555,7 +595,7 @@ async function teleport(u,cell){burst(chest(u),0xb7a0ff,14,{speed:1.6,up:2.4,g:1
   await tween(.16,k=>{u.mesh.scale.set(1-k,1+k*.8,1-k)});u.c=cell.c;u.r=cell.r;u.mesh.position.copy(cellPos(cell.c,cell.r));
   burst(chest(u),0xb7a0ff,14,{speed:1.6,up:2.4,g:1});ringFx(u.mesh.position,0xb7a0ff,1.2);
   await tween(.2,k=>{const e=ease.bounce(k);u.mesh.scale.set(e,2-e,e)});u.mesh.scale.setScalar(1);u.squash=.2;
-  if(G.token&&u.c===G.token.c&&u.r===G.token.r)await collectToken(u)}
+  if(G.token&&u.c===G.token.c&&u.r===G.token.r)await collectToken(u);await zoneTouch(u)}
 const shake=u=>tween(.35,k=>{u.mesh.userData.body.position.x=Math.sin(k*40)*(1-k)*.12;});
 async function lunge(a,t){faceTo(a,t);const p=a.mesh.position.clone(),q=t.mesh.position.clone().sub(p).setY(0).normalize();
   await tween(.14,k=>{a.mesh.position.copy(p).addScaledVector(q,-.22*ease.out(k));a.squash=.2*k});          // armé
@@ -564,7 +604,7 @@ async function lunge(a,t){faceTo(a,t);const p=a.mesh.position.clone(),q=t.mesh.p
 function impact(t,big){t.flash=1;hitStop(big?.12:.08);shakeCam(big?.5:.3);burst(chest(t),0xffd27a,16,{speed:3,up:2.6,size:.13,life:.5});burst(chest(t),0xff5a4a,8,{speed:2,up:2,size:.1});ringFx(t.mesh.position,0xffffff,1.3,.35)}
 
 /* ============ LOGIQUE : UNITÉS, EFFETS, DÉGÂTS ============ */
-function spawnUnit(d,team,c,r){const u={id:G.nid++,d,team,c,r,hp:4,alive:true,played:false,effect:null,buffs:[],flags:{},freeAtk:0,squash:0,flash:0,faceY:team===0?Math.PI:0};
+function spawnUnit(d,team,c,r){const u={id:G.nid++,d,team,c,r,hp:4,alive:true,played:false,effect:null,buffs:[],timers:[],flags:{},freeAtk:0,squash:0,flash:0,faceY:team===0?Math.PI:0};
   u.mesh=buildUnit(d,team);u.mesh.position.copy(cellPos(c,r));u.mesh.rotation.y=u.faceY;G.units.push(u);return u}
 async function dropIn(u){const to=cellPos(u.c,u.r);u.mesh.position.y=5;u.mesh.scale.set(.8,1.3,.8);
   await tween(.5,k=>{u.mesh.position.y=to.y+(1-ease.bounce(k))*5;u.mesh.scale.set(1,1,1)});u.squash=.4;burst(feet(u),u.team?0x8a90aa:0xffffff,10,{speed:1.6,up:1.2,size:.09,life:.5,g:5});ringFx(to,u.team?0x8a90aa:0xffffff,1.2);shakeCam(.12)}
@@ -603,6 +643,21 @@ function spinWheel(first){for(let i=0;i<20;i++){let c=Math.floor(Math.random()*N
 function syncToken(){if(G.token){tokenM.visible=true;tokenM.position.copy(cellPos(G.token.c,G.token.r))}else tokenM.visible=false}
 async function collectToken(u){burst(cellPos(u.c,u.r,.5),0xffc93c,26,{speed:2.6,up:3.4,size:.14,life:.9});ringFx(cellPos(u.c,u.r),0xffc93c,1.8,.6);shakeCam(.15);hop(u,.35,.4);drawCard(u.team,`${u.d.name} atteint le jeton`);G.token=null;syncToken();spinWheel(false)}
 
+/* ============ ZONES PERSISTANTES, MINUTERIES ============ */
+const zoneGroup=new THREE.Group();scene.add(zoneGroup);
+function syncZones(){while(zoneGroup.children.length)zoneGroup.remove(zoneGroup.children[0]);
+  for(const z of G.zones)for(const k of z.keys){const[c,r]=k.split(',').map(Number),m=new THREE.Mesh(new THREE.PlaneGeometry(.92,.92).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:ZK[z.kind].col,transparent:true,opacity:.4,depthWrite:false}));
+    m.position.set(c-3.5,(isStruct(c,r)?0.55:0.045),r-3.5);m.userData.z=z;zoneGroup.add(m)}}
+async function applyZone(z,u){if(z.hit.has(u.id))return;const K=ZK[z.kind];if(K.ally?u.team!==z.team:u.team===z.team)return;z.hit.add(u.id);
+  pop(u,K.ic+' '+K.n,'#ffd27a');
+  if(K.heal){heal(u,K.heal)}else{if(K.eff)await addEff(u,K.eff,{id:z.src.id,team:z.team});if(K.dmg&&u.alive)await dmg(u,K.dmg,z.src)}}
+async function zoneTouch(u){for(const z of G.zones)if(u.alive&&z.keys.has(KEY(u.c,u.r)))await applyZone(z,u)}
+async function addZone(src,cells,kind,ttl){const z={id:G.nid++,kind,ttl,src,team:src.team,keys:new Set(cells.map(ce=>KEY(ce.c,ce.r))),hit:new Set()};G.zones.push(z);syncZones();
+  log(`${ZK[kind].ic} Zone ${ZK[kind].n} créée (${ttl} manche${ttl>1?'s':''})`);
+  for(const ce of cells){burst(cellPos(ce.c,ce.r,.2),ZK[kind].col,4,{speed:1,up:2,size:.1,life:.7,g:-1})}
+  for(const u of alive(0).concat(alive(1)))if(z.keys.has(KEY(u.c,u.r)))await applyZone(z,u)}
+const timerIcon=u=>u.timers.map(t=>(t.kind==='bomb'?'💣':'🌱')+t.left).join(' ');
+
 /* ============ PORTÉE / DÉPLACEMENT ============ */
 function lineCells(a,b){const n=Math.max(Math.abs(b.c-a.c),Math.abs(b.r-a.r)),o=[];for(let i=1;i<n;i++)o.push([Math.round(a.c+(b.c-a.c)*i/n),Math.round(a.r+(b.r-a.r)*i/n)]);return o}
 /* 0 hors portée, 1 ok, 2 « solo » (PRE 1 vers le niveau supérieur : action unique) */
@@ -621,8 +676,27 @@ function reachable(u){
       const kk=KEY(c,r),ex=out.get(kk);if(!ex||ex.rem<rem){out.set(kk,{rem,prev:k,c,r});q.push(kk)}}}
   return out}
 function pathTo(u,reach,dest){const p=[];let k=KEY(dest.c,dest.r);while(k&&k!==KEY(u.c,u.r)){const n=reach.get(k);p.unshift([n.c,n.r]);k=n.prev}return p}
+const DIRS8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+const affects=(u,x,s)=>s.aff==='all'?x!==u:s.aff==='allies'?x.team===u.team:x.team!==u.team;
+function lineCellsDir(u,d,len){const o=[];let c=u.c,r=u.r;for(let i=0;i<len;i++){c+=d[0];r+=d[1];if(c<0||r<0||c>=N||r>=N)break;o.push({c,r})}return o}
+function lineUnits(u,s,d){const o=[];for(const ce of lineCellsDir(u,d,s.len)){const x=unitAt(ce.c,ce.r);if(x&&x!==u&&affects(u,x,s))o.push(x)}return o}
+const lineDirs=(u,s)=>(s.diag?DIRS8:DIRS).filter(d=>lineUnits(u,s,d).length);
+function dirFromCell(u,s,c,r){const dc=c-u.c,dr=r-u.r;if(!dc&&!dr)return null;let d=null;
+  if(!dr)d=[Math.sign(dc),0];else if(!dc)d=[0,Math.sign(dr)];else if(s.diag&&Math.abs(dc)===Math.abs(dr))d=[Math.sign(dc),Math.sign(dr)];
+  return d&&Math.max(Math.abs(dc),Math.abs(dr))<=s.len?d:null}
+function zoneCells(c,r,rad,shape){const o=[];for(let dr=-rad;dr<=rad;dr++)for(let dc=-rad;dc<=rad;dc++){if(shape==='cross'&&Math.abs(dc)+Math.abs(dr)>rad)continue;const cc=c+dc,rr=r+dr;if(cc<0||rr<0||cc>=N||rr>=N)continue;o.push({c:cc,r:rr})}return o}
+const zoneUnits=(u,s,c,r)=>zoneCells(c,r,s.rad,s.shape).map(ce=>unitAt(ce.c,ce.r)).filter(x=>x&&x!==u&&(affects(u,x,s)||(s.ff&&x.team===u.team)));
+const zoneValid=(u,s,c,r)=>cheb(u,{c,r})<=s.range&&(s.empty||zoneUnits(u,s,c,r).some(x=>s.ff?x.team!==u.team:true));
+const deadAllies=u=>G.units.filter(x=>!x.alive&&x.team===u.team&&!x.revived);
+const healTargets=u=>alive(u.team).filter(a=>(a.hp<4||a.effect)&&cheb(u,a)<=stat(u,'pre')+(isStruct(u.c,u.r)?1:0));
+function bestHit(u,s){if(s.t==='line')return Math.max(0,...lineDirs(u,s).map(d=>lineUnits(u,s,d).length));
+  if(s.t==='zone'){let m=0;for(const ce of targetsFor(u,s))m=Math.max(m,zoneUnits(u,s,ce.c,ce.r).length);return m}return 0}
 function targetsFor(u,s){
   if(s.passive)return[];
+  if(s.need&&!s.need(u))return[];
+  if(s.t==='line'){const o=[];for(const d of lineDirs(u,s))o.push(...lineCellsDir(u,d,s.len));return o}
+  if(s.t==='zone'){const o=[];for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(zoneValid(u,s,c,r))o.push({c,r});return o}
+  if(s.t==='multi')return targetsFor(u,{...s,t:s.aff==='allies'?'ally':'enemy'});
   if(s.t==='enemy')return alive(1-u.team).filter(t=>s.far?(cheb(u,t)<=s.far&&(!s.adj||freeAdj(t).length)&&(!s.adjSelf||freeAdj(u).length)):rangeState(u,t)===1);
   if(s.t==='ally')return alive(u.team).filter(t=>t===u||cheb(u,t)<=stat(u,'pre')+(isStruct(u.c,u.r)?1:0));
   if(s.t==='cell'){const o=[],cr=typeof s.cell==='function'?s.cell(u):s.cell;for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(!unitAt(c,r)&&cheb(u,{c,r})<=cr)o.push({c,r});return o}
@@ -659,14 +733,14 @@ async function combat0(att,def){
   if(sub(att)==='Protector')await dmg(def,1,att,true);else if(sub(def)==='Protector')await dmg(att,1,def,true);return'tie'}
 
 /* ============ TOURS ============ */
-function beginRound(){G.round++;G.turnPlayer=(G.round-1)%2;G.units.forEach(u=>u.played=false);G.sel=null;G.mode='idle';
+function beginRound(){G.round++;G.chain=[0,0];G.turnPlayer=(G.round-1)%2;G.units.forEach(u=>u.played=false);G.sel=null;G.mode='idle';
   log(`<span class="r">— Manche ${G.round} —</span> ${TEAMS[G.turnPlayer]} commencent`);focusNext();refresh()}
 function focusNext(){const u=alive(G.turnPlayer).find(x=>!x.played);if(u)G.cur={c:u.c,r:u.r}}
 function selectUnit(u){hop(u,.3,.32);ringFx(u.mesh.position,0xffb42e,1.1,.4);G.sel=u;G.committed=false;G.used={move:false,atk:false,abl:false,card:false};
   G.actions=(u.effect&&u.effect.type==='stun')?1:2;G.mode=(u.effect&&u.effect.type==='frozen')?'frozen':'sel';
   if(G.actions===1)toast('Assommé : une seule action ce tour');recalc();refresh()}
 function commit(){if(G.committed)return;G.committed=true;const u=G.sel;u.buffs=u.buffs.filter(b=>!(b.until==='turn'&&b.src===u.id))}
-const noMoreActions=()=>G.sel&&G.mode!=='frozen'&&!['move','atk','abl','ult','card'].some(c=>can(c)[0]);
+const noMoreActions=()=>G.sel&&G.mode!=='frozen'&&!['move','atk','abl','ult','card','heal'].some(c=>can(c)[0]);
 async function after(){G.busy=false;if(G.phase==='over')return;
   if(G.actions<=0&&!(G.sel.freeAtk>0&&attackTargets(G.sel).length)){await sleep(300);await endTurn()}
   else{G.mode='sel';recalc();refresh();if(noMoreActions()){toast('Plus d\'action possible : fin du tour');G.busy=true;await sleep(700);await endTurn()}}}
@@ -680,10 +754,22 @@ async function endTurn(){const u=G.sel;if(!u||G.busy&&false)return;G.busy=true;
   if(G.phase==='over'){G.busy=false;return}
   focusNext();G.busy=false;recalc();refresh()}
 async function endRound(){
+  for(const u of[...G.units]){if(!u.alive||!u.timers.length)continue;
+    for(const tm of[...u.timers]){tm.left--;
+      if(tm.left<=0){u.timers.splice(u.timers.indexOf(tm),1);
+        if(tm.kind==='bomb'){log(`💥 La bombe « ${tm.name} » explose sur ${u.d.name}`);burst(chest(u),0xffa02e,30,{speed:4,up:4,size:.18,life:.9});ringFx(u.mesh.position,0xffa02e,2.4,.6);shakeCam(.6);hitStop(.1);
+          await dmg(u,tm.dmg,tm.src);for(const x of alive(0).concat(alive(1)))if(x!==u&&x.alive&&cheb(x,u)<=1)await dmg(x,1,tm.src)}
+        else if(tm.kind==='hot'){heal(u,tm.amt)}}
+      else if(tm.kind==='hot'){log(`${tm.name} soigne ${u.d.name}`);heal(u,tm.amt)}
+      if(G.phase==='over')return}}
+  for(const z of[...G.zones]){for(const u of alive(0).concat(alive(1)))if(z.keys.has(KEY(u.c,u.r)))await applyZone(z,u);z.ttl--;z.hit.clear();if(z.ttl<=0){G.zones.splice(G.zones.indexOf(z),1);log(`La zone ${ZK[z.kind].n} se dissipe`)}
+    if(G.phase==='over')return}
+  syncZones();
   for(const u of[...G.units]){if(!u.alive||!u.effect)continue;
     if(u.effect.type==='toxic'){log(`${u.d.name} souffre du poison`);const l=--u.effect.left;await dmg(u,1,null);if(u.alive&&l<=0)u.effect=null}
     else if(u.effect.type==='burn'){const r=d6();log(`Brûlure de ${u.d.name} : d6 = ${r}`);if(r<=3){u.effect=null;pop(u,'Éteint','#9cf')}else await dmg(u,1,null)}
     if(G.phase==='over')return}
+  for(const u of G.units)if(u.alive&&sub(u)==='Assist'){const w=alive(u.team).filter(a=>a.hp<4&&cheb(a,u)<=2).sort((a,b)=>a.hp-b.hp)[0];if(w){log(`${u.d.name} (Assist) : présence apaisante`);heal(w,1)}}
   for(const u of G.units)if(u.alive&&u.d.ab.passive&&u.d.ab.regen&&u.hp<4){log(`${u.d.name} : passif ${u.d.ab.n}`);heal(u,u.d.ab.regen)}
   G.units.forEach(u=>u.buffs=u.buffs.filter(b=>b.until!=='round'));
   await sleep(250);beginRound()}
@@ -698,22 +784,27 @@ function can(cmd){const u=G.sel;if(!u)return[false,'Aucun personnage'];if(G.mode
    case'abl':case'ult':{const s=cmd==='abl'?u.d.ab:u.d.ul;if(s.passive)return[false,'Passif : toujours actif'];if(G.used.abl)return[false,'Capacité déjà utilisée'];if(G.actions<=0)return[false,'Plus d\'actions'];if(eff==='disrupt')return[false,'Bouleversement'];
      if(cmd==='ult'){if(G.round<2)return[false,'Dès la manche 2'];if(G.ult[u.team])return[false,'Ultime déjà utilisé']}
      return targetsFor(u,s).length?[true]:[false,'Aucune cible']}
+   case'heal':{if(u.d.cls!=='S')return[false,'Réservé au Soutien'];if(G.used.heal)return[false,'Déjà soigné ce tour'];if(G.actions<=0)return[false,'Plus d\'actions'];return healTargets(u).length?[true]:[false,'Aucun allié blessé à portée']}
    case'card':if(G.used.card)return[false,'1 renfort par tour'];if(!G.hand[u.team].length)return[false,'Aucun renfort'];if(eff==='jam')return[false,'Brouillage'];return[true]}}
 async function doMove(dest){const u=G.sel,reach=reachable(u);G.busy=true;commit();const p=pathTo(u,reach,dest);G.hl=new Map();paintHL();
   await walk(u,p);G.used.move=true;G.actions--;log(`${u.d.name} → ${cellName(u.c,u.r)}`);
-  if(G.token&&u.c===G.token.c&&u.r===G.token.r)await collectToken(u);await after()}
+  if(G.token&&u.c===G.token.c&&u.r===G.token.r)await collectToken(u);await zoneTouch(u);await after()}
 async function doAttack(t,solo){const u=G.sel;G.busy=true;commit();G.hl=new Map();paintHL();
   if(u.freeAtk>0)u.freeAtk--;else{G.actions--;G.used.atk=true}
   if(solo)G.actions=0;await combat(u,t);await after()}
 async function doAbility(isUlt,tg){const u=G.sel,s=isUlt?u.d.ul:u.d.ab;G.busy=true;commit();G.hl=new Map();paintHL();
   G.actions--;G.used.abl=true;if(isUlt)G.ult[u.team]=true;
   log(`<b>${u.d.name}</b> utilise ${isUlt?'l\'ultime ':''}<span class="r">${s.n}</span>`);pop(u,s.n,'#d9b8ff');
-  await s.run(u,tg);await sleep(200);if(G.phase==='over')return;await after()}
+  await s.run(u,tg);G.chain[u.team]++;await sleep(200);if(G.phase==='over')return;await after()}
+async function doHeal(t){const u=G.sel;G.busy=true;commit();G.hl=new Map();G.pv={hl:new Map(),mark:new Map()};paintHL();G.actions--;G.used.heal=true;
+  log(`<b>${u.d.name}</b> soigne <b>${t.d.name}</b>`);faceTo(u,t);await hop(u,.18,.25);
+  heal(t,1);if(u.d.sub==='Engineer'){addBuff(t,'def',1,'turn',u);pop(t,'+1 DEF','#6aa8ff')}else cleanse(t);
+  await sleep(250);await after()}
 async function useCard(i){const u=G.sel,c=G.hand[u.team][i];G.busy=true;commit();G.hand[u.team].splice(i,1);G.used.card=true;
   log(`<b>${u.d.name}</b> joue le renfort <span class="r">${c.n}</span>`);await c.use(u);await sleep(200);G.mode='sel';await after()}
 
 /* ============ SURBRILLANCES ============ */
-const TMC={atk:0xff4d4d,hint:0xff4d4d,abl:0xc48cff,ally:0x3ee08a};
+const TMC={atk:0xff4d4d,hint:0xff4d4d,abl:0xc48cff,ally:0x3ee08a,warn:0xffa02e};
 function areaCells(u,f){const out=[];for(let r=0;r<N;r++)for(let c=0;c<N;c++){if(c===u.c&&r===u.r)continue;const cell={c,r};let ok=false;
   if(f==='atk')ok=rangeState(u,cell)===1;
   else if(f.t==='enemy')ok=f.far?cheb(u,cell)<=f.far:rangeState(u,cell)===1;
@@ -728,16 +819,28 @@ function recalc(){G.hl=new Map();G.solo=new Set();G.tmark=new Map();G.tcount=nul
   if(G.mode==='move'){for(const[k] of reachable(u))if(k!==KEY(u.c,u.r))G.hl.set(k,'move')}
   else if(G.mode==='atk'){const ts=attackTargets(u);G.tcount=ts.length;
     for(const{t,solo} of ts){G.hl.set(KEY(t.c,t.r),'atk');G.tmark.set(t.id,'atk');if(solo)G.solo.add(KEY(t.c,t.r))}area('atk','rngA')}
+  else if(G.mode==='heal'){const ts=healTargets(u);G.tcount=ts.length;for(const t of ts){G.hl.set(KEY(t.c,t.r),'ally');G.tmark.set(t.id,'ally')}
+    for(const c of areaCells(u,{t:'ally'}))if(!G.hl.has(c))G.hl.set(c,'rngB')}
+  else if((G.mode==='abl'||G.mode==='ult')&&['line','zone'].includes((G.mode==='abl'?u.d.ab:u.d.ul).t)){
+    const s=G.mode==='abl'?u.d.ab:u.d.ul,ts=targetsFor(u,s);G.tcount=s.t==='line'?lineDirs(u,s).length:bestHit(u,s);
+    if(s.t==='line'){for(const d of lineDirs(u,s)){for(const ce of lineCellsDir(u,d,s.len)){const k=KEY(ce.c,ce.r);if(!G.hl.has(k))G.hl.set(k,'rngB');const x=unitAt(ce.c,ce.r);if(x&&x!==u&&affects(u,x,s))G.tmark.set(x.id,s.aff==='allies'?'ally':'abl')}}}
+    else for(const ce of ts)G.hl.set(KEY(ce.c,ce.r),'rngB')}
   else if(G.mode==='abl'||G.mode==='ult'){const s=G.mode==='abl'?u.d.ab:u.d.ul,ts=targetsFor(u,s);G.tcount=ts.length;
     const kind=s.t==='ally'||(s.t==='none'&&s.aoe!=='enemies')?'ally':'abl';
     for(const t of ts){if(s.t==='cell'){G.hl.set(KEY(t.c,t.r),'abl')}else{G.hl.set(KEY(t.c,t.r),kind);G.tmark.set(t.id,kind)}}
-    area(s,'rngB')}
-  paintHL()}
+    for(const x of G.multi)G.tmark.set(x.id,'atk');
+    area(s.t==='multi'?{t:s.aff==='allies'?'ally':'enemy'}:s,'rngB')}
+  refreshPreview();paintHL()}
+function refreshPreview(){G.pv={hl:new Map(),mark:new Map()};const u=G.sel;if(!u||G.phase!=='play')return;
+  const s=G.mode==='abl'?u.d.ab:G.mode==='ult'?u.d.ul:null;if(!s)return;const{c,r}=G.cur;
+  if(s.t==='line'){const d=dirFromCell(u,s,c,r);if(d&&lineUnits(u,s,d).length){for(const ce of lineCellsDir(u,d,s.len))G.pv.hl.set(KEY(ce.c,ce.r),'abl');for(const x of lineUnits(u,s,d))G.pv.mark.set(x.id,s.aff==='allies'?'ally':x.team===u.team?'warn':'abl')}}
+  else if(s.t==='zone'&&zoneValid(u,s,c,r)){for(const ce of zoneCells(c,r,s.rad,s.shape))G.pv.hl.set(KEY(ce.c,ce.r),s.hazard?'atk':'abl');for(const x of zoneUnits(u,s,c,r))G.pv.mark.set(x.id,x.team===u.team?(s.aff==='allies'?'ally':'warn'):'abl')}}
 
 /* ============ HUD ============ */
 const hearts=u=>'♥'.repeat(u.hp)+'<i>'+'♥'.repeat(4-u.hp)+'</i>';
 const fxIcon=u=>u.effect?EFF[u.effect.type][0]:'';
 function refresh(){
+  refreshPreview();
   if(G.phase==='menu'||G.phase==='pick'){$('#dock').style.display='none';renderTop();renderRosters();return}
   $('#dock').style.display='grid';renderTop();renderRosters();renderDock()}
 function renderTop(){
@@ -745,7 +848,7 @@ function renderTop(){
   if(G.phase==='menu'||G.phase==='pick'){b.innerHTML='<b>Sélection des personnages</b>';h.innerHTML='';return}
   if(G.phase==='place'){const t=G.pl%2,d=G.picks[t][Math.floor(G.pl/2)];b.innerHTML=`<span class="dot t${t}"></span>Placement · ${TEAMS[t]}`;h.innerHTML=`Place <b>${d.name}</b> sur une case jaune : <kbd>←↑↓→</kbd> puis <kbd>Entrée</kbd> · <kbd>X</kbd> placement auto`;return}
   if(G.phase==='over'){b.innerHTML='<b>Partie terminée</b>';h.innerHTML='';return}
-  b.innerHTML=`<span>Manche ${G.round}</span><span class="dot t${G.turnPlayer}"></span><span>Tour des ${TEAMS[G.turnPlayer]}${G.bot&&G.turnPlayer===1?' (bot)':''}</span>`;
+  b.innerHTML=`<span>Manche ${G.round}</span>${G.chain[G.turnPlayer]?`<span class="chain">⛓ Chaîne ×${G.chain[G.turnPlayer]}</span>`:''}<span class="dot t${G.turnPlayer}"></span><span>Tour des ${TEAMS[G.turnPlayer]}${G.bot&&G.turnPlayer===1?' (bot)':''}</span>`;
   const m=G.mode,u=G.sel;let t='';
   if(m==='idle'&&G.bot&&G.turnPlayer===1)t='Le bot réfléchit…';
   else if(m==='idle')t=`Choisis un personnage <kbd>Entrée</kbd> ou <kbd>Tab</kbd> pour passer au suivant`;
@@ -754,7 +857,10 @@ function renderTop(){
   else if(m==='move')t='Choisis une case bleue · <kbd>Entrée</kbd> valider · <kbd>Échap</kbd> annuler';
   else if(m==='atk')t=`<b style="color:#ff6b6b">${G.tcount} ennemi${G.tcount>1?'s':''} attaquable${G.tcount>1?'s':''}</b> (rouge) · zone de portée teintée · <kbd>Entrée</kbd> attaquer · <kbd>Échap</kbd> annuler`;
   else if(m==='abl'||m==='ult'){const s=m==='abl'?u.d.ab:u.d.ul;const who=s.t==='cell'?'case(s) disponible(s)':s.t==='ally'||(s.t==='none'&&s.aoe!=='enemies')?'allié(s) concerné(s) (vert)':'ennemi(s) concerné(s) (violet)';
-    t=`${s.n} : <b style="color:#c48cff">${G.tcount} ${who}</b> · `+(s.t==='none'?'<kbd>Entrée</kbd> pour lancer':'<kbd>Entrée</kbd> sur une cible')+' · <kbd>Échap</kbd> annuler'}
+    const extra={line:['ligne(s) possible(s)','Place le curseur sur une case alignée : toute la ligne est touchée'],zone:[`zone(s) : jusqu'à ${G.tcount} touché(s)`,'Place le curseur sur le centre de la zone'],multi:['cible(s) disponibles',`Choisis jusqu'à ${s.k} cibles (${G.multi.length}/${s.k})`]}[s.t];
+    t=extra?`${s.n} : <b style="color:#c48cff">${s.t==='zone'?bestHit(u,s)+' touché(s) max':G.tcount+' '+extra[0]}</b> · ${extra[1]} · <kbd>Entrée</kbd> · <kbd>Échap</kbd>`
+      :`${s.n} : <b style="color:#c48cff">${G.tcount} ${who}</b> · `+(s.t==='none'?'<kbd>Entrée</kbd> pour lancer':'<kbd>Entrée</kbd> sur une cible')+' · <kbd>Échap</kbd> annuler'}
+  else if(m==='heal')t=`<b style="color:#3ee08a">${G.tcount} allié${G.tcount>1?'s':''} à soigner</b> (vert) · <kbd>Entrée</kbd> soigner · <kbd>Échap</kbd> annuler`;
   else if(m==='card')t='<kbd>↑↓</kbd> choisir · <kbd>Entrée</kbd> jouer · <kbd>Échap</kbd> annuler';
   h.innerHTML=t}
 const isReady=u=>G.phase==='play'&&u.alive&&u.team===G.turnPlayer&&!u.played&&!(G.bot&&u.team===1);
@@ -772,22 +878,25 @@ function renderDock(){
    <div class="stats"><span>ATK <b>${stat(u,'atk')}</b></span><span>DEF <b>${stat(u,'def')}</b></span><span>HAB <b>${stat(u,'hab')}</b></span><span>PRE <b>${stat(u,'pre')}</b></span></div>
    <div class="abil">${d.power?`<b>${d.power.includes(' + ')?'Double pouvoir':'Pouvoir'} · ${d.power}</b><br>`:''}<b>${d.ab.passive?'Passif · ':''}${d.ab.n}</b> — ${d.ab.x}<br><b>Ultime · ${d.ul.n}</b> — ${d.ul.x}${G.variant?`<br><b>${d.sub}</b> — ${SUBTXT[d.sub]}`:''}</div>`;
   if(G.sel!==u||G.phase!=='play'){acts.innerHTML='';pips.innerHTML='';cards.innerHTML='';return}
-  const cnt=cmd=>cmd==='atk'?attackTargets(u).length:cmd==='abl'?targetsFor(u,d.ab).length:cmd==='ult'?targetsFor(u,d.ul).length:0;
-  const B=(k,label,cmd,on)=>{const[ok,why]=can(cmd);const n=ok&&cnt(cmd);return`<button class="btn ${on?'on':''}" data-cmd="${cmd}" ${ok?'':'disabled'} title="${why||''}"><kbd>${k}</kbd>${label}${n?` <small class="cnt">${n} cible${n>1?'s':''}</small>`:''}${ok?'':` <small style="color:var(--mut)">(${why})</small>`}</button>`};
+  const cntTxt=sp=>sp.t==='line'||sp.t==='zone'?`jusqu'à ${bestHit(u,sp)} touché${bestHit(u,sp)>1?'s':''}`:`${targetsFor(u,sp).length} cible${targetsFor(u,sp).length>1?'s':''}`;
+  const cnt=cmd=>cmd==='atk'?attackTargets(u).length+' cible'+(attackTargets(u).length>1?'s':''):cmd==='abl'?cntTxt(d.ab):cmd==='ult'?cntTxt(d.ul):cmd==='heal'?healTargets(u).length+' blessé'+(healTargets(u).length>1?'s':''):'';
+  const B=(k,label,cmd,on)=>{const[ok,why]=can(cmd);const n=ok&&cnt(cmd);return`<button class="btn ${on?'on':''}" data-cmd="${cmd}" ${ok?'':'disabled'} title="${why||''}"><kbd>${k}</kbd>${label}${n?` <small class="cnt">${n}</small>`:''}${ok?'':` <small style="color:var(--mut)">(${why})</small>`}</button>`};
   acts.innerHTML=G.mode==='frozen'?`<button class="btn" data-cmd="thaw"><kbd>F</kbd>Briser (−1 PV)</button><button class="btn" data-cmd="end"><kbd>E</kbd>Passer</button>`:
-   B(1,'Déplacer','move',G.mode==='move')+B(2,'Attaquer','atk',G.mode==='atk')+B(3,(d.ab.passive?'Passif · ':'')+d.ab.n,'abl',G.mode==='abl')+B(4,'Ult · '+d.ul.n,'ult',G.mode==='ult')+B(5,`Renfort (${G.hand[u.team].length})`,'card',G.mode==='card')+`<button class="btn" data-cmd="end"><kbd>E</kbd>Fin de tour</button>`;
+   B(1,'Déplacer','move',G.mode==='move')+B(2,'Attaquer','atk',G.mode==='atk')+B(3,(d.ab.passive?'Passif · ':'')+d.ab.n,'abl',G.mode==='abl')+B(4,'Ult · '+d.ul.n,'ult',G.mode==='ult')+B(5,`Renfort (${G.hand[u.team].length})`,'card',G.mode==='card')+(d.cls==='S'?B(6,'Soigner','heal',G.mode==='heal'):'')+`<button class="btn" data-cmd="end"><kbd>E</kbd>Fin de tour</button>`;
   acts.querySelectorAll('button').forEach(b=>b.onclick=()=>command(b.dataset.cmd));
   pips.innerHTML=`Actions : ${[0,1].map(i=>`<span class="pip ${i<G.actions?'':'off'}"></span>`).join('')}${u.freeAtk>0?` · Blitz : ${u.freeAtk} attaque(s) gratuite(s)`:''}${u.buffs.length?' · Bonus : '+u.buffs.map(b=>`${b.v>0?'+':''}${b.v} ${b.k.toUpperCase()}`).join(', '):''}`;
   const hand=G.hand[u.team];cards.innerHTML=hand.map((c,i)=>`<div class="card ${G.mode==='card'&&i===G.cardIdx?'cur':''}"><b>${c.n}</b><br>${c.x}</div>`).join('')}
 function renderBadges(){const el=$('#badges');let h='';for(const u of G.units){if(!u.alive||!u.mesh.visible)continue;const[x,y]=screenOf(u.mesh.position,1.35);
-  const tm=G.tmark&&G.tmark.get(u.id),tag=tm&&tm!=='hint'?`<div class="tg ${tm}">${tm==='atk'?'⚔ Attaquable':tm==='ally'?'✚ Allié concerné':'✦ Ennemi concerné'}</div>`:'';
-  h+=`<div class="badge t${u.team}" style="left:${x}px;top:${y}px">${tag}<div class="hp">${hearts(u)}</div><span class="nm">${u.effect?`<span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span> `:''}${u.d.name}</span></div>`}
+  const tm=G.pv.mark.get(u.id)||(G.tmark&&G.tmark.get(u.id)),tag=tm&&tm!=='hint'?`<div class="tg ${tm}">${tm==='atk'?'⚔ Attaquable':tm==='ally'?'✚ Allié concerné':tm==='warn'?'⚠ Allié touché':'✦ Ennemi concerné'}</div>`:'';
+  h+=`<div class="badge t${u.team}" style="left:${x}px;top:${y}px">${tag}<div class="hp">${hearts(u)}</div><span class="nm">${u.effect?`<span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span> `:''}${u.timers.length?`<span class="fxi">${timerIcon(u)}</span> `:''}${u.d.name}</span></div>`}
+  for(const z of G.zones){const ks=[...z.keys].map(k=>k.split(',').map(Number)),cx=ks.reduce((a,b)=>a+b[0],0)/ks.length,cz=ks.reduce((a,b)=>a+b[1],0)/ks.length,[x,y]=screenOf(new THREE.Vector3(cx-3.5,.3,cz-3.5));
+    h+=`<div class="zb" style="left:${x}px;top:${y}px;color:#${ZK[z.kind].col.toString(16).padStart(6,'0')}">${ZK[z.kind].ic} ${z.ttl}</div>`}
   if(el._h!==h){el.innerHTML=h;el._h=h}}
-function renderKeys(){const K=[['←↑↓→ / WASD','Curseur'],['Entrée / Espace','Valider'],['Tab','Perso suivant'],['1','Déplacer'],['2','Attaquer'],['3','Capacité'],['4','Ultime (manche 2+)'],['5','Carte renfort'],['E','Fin de tour'],['Échap','Annuler'],['V','Vue plongeante/inclinée'],['[ ]','Tourner la caméra'],['0','Recentrer'],['Clic droit + glisser','Orbiter'],['Molette','Zoom'],['Maj/Molette + glisser','Déplacer'],['+ / −','Zoom'],['H','Masquer l\'aide']];
+function renderKeys(){const K=[['←↑↓→ / WASD','Curseur'],['Entrée / Espace','Valider'],['Tab','Perso suivant'],['1','Déplacer'],['2','Attaquer'],['3','Capacité'],['4','Ultime (manche 2+)'],['5','Carte renfort'],['6','Soigner (Soutien)'],['E','Fin de tour'],['Échap','Annuler'],['V','Vue plongeante/inclinée'],['[ ]','Tourner la caméra'],['0','Recentrer'],['Clic droit + glisser','Orbiter'],['Molette','Zoom'],['Maj/Molette + glisser','Déplacer'],['+ / −','Zoom'],['H','Masquer l\'aide']];
   $('#keys').innerHTML='<div class="kh"><span>Contrôles</span><kbd>H</kbd></div>'+K.map(([k,t])=>`<kbd>${k}</kbd><span>${t}</span>`).join('')}
 
 /* ============ MENU, SÉLECTION & PLACEMENT ============ */
-function resetGame(){G.units.forEach(u=>scene.remove(u.mesh));G.units=[];G.picks=[[],[]];G.round=0;G.hand=[[],[]];G.deck=[newDeck(),newDeck()];G.ult=[false,false];G.sel=null;G.mode='idle';G.token=null;G.over=null;G.busy=false;G.botRun=false;
+function resetGame(){G.zones=[];G.chain=[0,0];G.multi=[];syncZones();G.units.forEach(u=>scene.remove(u.mesh));G.units=[];G.picks=[[],[]];G.round=0;G.hand=[[],[]];G.deck=[newDeck(),newDeck()];G.ult=[false,false];G.sel=null;G.mode='idle';G.token=null;G.over=null;G.busy=false;G.botRun=false;
   $('#log').innerHTML='';$('#dice').hidden=true;G.hl=new Map();paintHL();syncToken()}
 function startMenu(){resetGame();G.phase='menu';G.menuSel=G.bot?1:0;showMenu();refresh()}
 function showMenu(){const ov=$('#overlay');ov.className='on';
@@ -867,6 +976,7 @@ async function botTurn(){
   }finally{G.botRun=false}}
 async function botAct(u){
   if(can('card')[0]&&Math.random()<.25){await useCard(Math.floor(Math.random()*G.hand[1].length));return true}
+  if(can('heal')[0]&&Math.random()<.7){const w=healTargets(u).sort((a,b)=>a.hp-b.hp)[0];await doHeal(w);return true}
   if(can('atk')[0]&&Math.random()<.75){const ts=attackTargets(u),x=Math.random()<.4?ts.slice().sort((a,b)=>a.t.hp-b.t.hp)[0]:pickR(ts);await doAttack(x.t,x.solo);return true}
   if(can('ult')[0]&&Math.random()<.15&&await botAbility(u,true))return true;
   if(can('abl')[0]&&Math.random()<.35&&await botAbility(u,false))return true;
@@ -882,6 +992,11 @@ async function botAbility(u,isUlt){
   if(s.t==='enemy')tg=pickR(ts);
   else if(s.t==='ally'){const w=ts.slice().sort((a,b)=>a.hp-b.hp)[0];if(w.hp>=4&&!w.effect&&Math.random()<.7)return false;tg=w}
   else if(s.t==='cell'){const foe=alive(0).sort((a,b)=>cheb(u,a)-cheb(u,b))[0];tg=Math.random()<.3?pickR(ts):ts.slice().sort((a,b)=>cheb(a,foe)-cheb(b,foe))[0]}
+  else if(s.t==='line'){const d=pickR(lineDirs(u,s));tg={dir:d,cells:lineCellsDir(u,d,s.len),units:lineUnits(u,s,d)}}
+  else if(s.t==='zone'){const foe=alive(0).sort((a,b)=>cheb(u,a)-cheb(u,b))[0];
+    const sc=ce=>s.empty?-cheb(ce,foe):zoneUnits(u,s,ce.c,ce.r).reduce((a,x)=>a+(x.team===u.team?-2:1),0);
+    const ce=ts.slice().sort((a,b)=>sc(b)-sc(a))[0];if(!s.empty&&sc(ce)<=0)return false;tg={c:ce.c,r:ce.r,cells:zoneCells(ce.c,ce.r,s.rad,s.shape),units:zoneUnits(u,s,ce.c,ce.r)}}
+  else if(s.t==='multi')tg=shuffle(ts.slice()).slice(0,s.k);
   else tg=ts;
   await doAbility(isUlt,tg);return true}
 
@@ -892,10 +1007,10 @@ async function command(cmd){
   if(cmd==='end'){if(G.mode==='frozen'){log(`${u.d.name} reste gelé et passe son tour`)}await endTurn();return}
   if(cmd==='thaw'){if(G.mode!=='frozen')return;G.busy=true;u.effect=null;log(`${u.d.name} brise la glace`);await dmg(u,1,null);G.busy=false;if(u.alive){G.mode='sel';recalc();refresh()}else{await endTurn()}return}
   if(G.mode==='frozen')return;
-  if(G.mode===cmd){G.mode='sel';recalc();refresh();return}
+  if(G.mode===cmd){G.multi=[];G.mode='sel';recalc();refresh();return}
   const[ok,why]=can(cmd);if(!ok){toast(why);return}
   if(cmd==='card'){G.mode='card';G.cardIdx=0;refresh();return}
-  G.mode=cmd;recalc();
+  G.multi=[];G.mode=cmd;recalc();
   if(cmd==='move'){const p=[...G.hl.keys()][0];if(p){const[c,r]=p.split(',').map(Number);G.cur={c,r}}}
   else{const k=[...G.hl.keys()][0];if(k){const[c,r]=k.split(',').map(Number);G.cur={c,r}}}
   refresh()}
@@ -909,12 +1024,20 @@ async function confirmAct(){
   if(G.mode==='sel'){if(t&&t!==u&&t.team===u.team&&!t.played&&!G.committed){selectUnit(t);autoEndIfStuck()}else toast('Choisis une action (1-5)');return}
   if(G.mode==='move'){if(h==='move')return doMove({c,r})}
   else if(G.mode==='atk'){if(t&&h==='atk')return doAttack(t,G.solo.has(k))}
+  else if(G.mode==='heal'){if(t&&h==='ally')return doHeal(t)}
   else if(G.mode==='abl'||G.mode==='ult'){const isU=G.mode==='ult',s=isU?u.d.ul:u.d.ab;
     if(s.t==='none')return doAbility(isU,targetsFor(u,s));
+    if(s.t==='line'){const d=dirFromCell(u,s,c,r);if(d&&lineUnits(u,s,d).length)return doAbility(isU,{dir:d,cells:lineCellsDir(u,d,s.len),units:lineUnits(u,s,d)});toast('Choisis une case alignée avec des cibles');return}
+    if(s.t==='zone'){if(zoneValid(u,s,c,r))return doAbility(isU,{c,r,cells:zoneCells(c,r,s.rad,s.shape),units:zoneUnits(u,s,c,r)});toast('Centre hors de portée ou sans cible');return}
+    if(s.t==='multi'){const ts=targetsFor(u,s),cur=t&&ts.includes(t)?t:null,go=()=>{const l=G.multi.slice();G.multi=[];return doAbility(isU,l)};
+      if(cur&&G.multi.includes(cur))return go();
+      if(!cur){if(G.multi.length)return go();toast('Cible invalide');return}
+      G.multi.push(cur);if(G.multi.length>=s.k||!ts.some(x=>!G.multi.includes(x)))return go();
+      toast(`${G.multi.length}/${s.k} cibles · Entrée sur une cible déjà choisie pour lancer`);recalc();refresh();return}
     if(s.t==='cell'){if(h)return doAbility(isU,{c,r})}else if(t&&h)return doAbility(isU,t)}
   toast('Cible ou case invalide')}
 const MOVE={arrowup:[0,-1],w:[0,-1],arrowdown:[0,1],s:[0,1],arrowleft:[-1,0],a:[-1,0],arrowright:[1,0],d:[1,0],z:[0,-1],q:[-1,0]};
-function cancel(){if(G.busy||G.phase!=='play'||(G.bot&&G.turnPlayer===1))return;if(G.mode==='sel'&&!G.committed&&G.sel){G.sel=null;G.mode='idle';recalc();refresh()}else if(['move','atk','abl','ult','card'].includes(G.mode)){G.mode='sel';recalc();refresh()}}
+function cancel(){if(G.busy||G.phase!=='play'||(G.bot&&G.turnPlayer===1))return;if(G.mode==='sel'&&!G.committed&&G.sel){G.sel=null;G.mode='idle';recalc();refresh()}else if(['move','atk','abl','ult','card','heal'].includes(G.mode)){G.multi=[];G.mode='sel';recalc();refresh()}}
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();if(e.ctrlKey||e.metaKey||e.altKey)return;
   if(['arrowup','arrowdown','arrowleft','arrowright',' ','tab'].includes(k))e.preventDefault();
@@ -949,12 +1072,12 @@ addEventListener('keydown',e=>{
     if(G.sel&&G.committed){toast('Termine d\'abord le tour de '+G.sel.d.name);return}
     const cur=list.findIndex(u=>u.c===G.cur.c&&u.r===G.cur.r),n=list[(cur+1)%list.length];G.cur={c:n.c,r:n.r};
     if(G.sel){selectUnit(n);autoEndIfStuck()}else refresh();return}
-  const cmd={'1':'move','2':'atk','3':'abl','4':'ult','5':'card',e:'end',f:'thaw'}[k];if(cmd)command(cmd)});
+  const cmd={'1':'move','2':'atk','3':'abl','4':'ult','5':'card','6':'heal',e:'end',f:'thaw'}[k];if(cmd)command(cmd)});
 
 // souris
 const ray=new THREE.Raycaster(),mp=new THREE.Vector2();
 function pick(ev){const r=canvas.getBoundingClientRect();mp.set((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1);ray.setFromCamera(mp,cam);const h=ray.intersectObjects(tiles)[0];return h&&h.object.userData}
-canvas.addEventListener('pointermove',ev=>{if(G.phase==='menu'||G.phase==='pick'||G.busy)return;const p=pick(ev);if(p&&(p.c!==G.cur.c||p.r!==G.cur.r)){G.cur={c:p.c,r:p.r};renderDock()}});
+canvas.addEventListener('pointermove',ev=>{if(G.phase==='menu'||G.phase==='pick'||G.busy)return;const p=pick(ev);if(p&&(p.c!==G.cur.c||p.r!==G.cur.r)){G.cur={c:p.c,r:p.r};refreshPreview();renderDock()}});
 canvas.addEventListener('click',ev=>{if(G.phase==='menu'||G.phase==='pick'||ev.shiftKey)return;const p=pick(ev);if(p){G.cur={c:p.c,r:p.r};confirmAct()}});
 canvas.addEventListener('contextmenu',ev=>ev.preventDefault());
 let drag=null;
@@ -973,6 +1096,7 @@ function frame(now){const raw=Math.min(.05,(now-last)/1000);last=now;const t=now
   const cp=cellPos(G.cur.c,G.cur.r,0.05+Math.sin(t*5)*.03);cursor.position.lerp(cp,1-Math.exp(-raw*22));cursor.scale.setScalar(1+Math.sin(t*6)*.04);
   cursor.visible=G.phase!=='menu'&&G.phase!=='pick'&&G.phase!=='over';cursor.material.color.setHex(G.busy?0x777777:0xffb42e);
   if(G.sel&&G.sel.alive){selRing.visible=true;selRing.position.copy(G.sel.mesh.position);selRing.position.y+=0.16;selRing.rotation.y=t;selRing.scale.setScalar(1+Math.sin(t*5)*.08)}else selRing.visible=false;
+  for(const m of zoneGroup.children){m.material.opacity=.3+.15*Math.sin(t*4+m.position.x*2+m.position.z);if(Math.random()<raw*1.2){const z=m.userData.z;burst(m.position.clone(),ZK[z.kind].col,1,{speed:.3,up:1.6,g:-1,size:.08,life:.8})}}
   tk.rotation.y=t*2;tk.position.y=0.55+Math.sin(t*3)*.09;tk.scale.setScalar(1+Math.sin(t*5)*.08);tkr.rotation.z=t;tkr.scale.setScalar(1+Math.sin(t*3)*.12);
   for(const u of G.units){if(!u.alive)continue;const b=u.mesh.userData.body,sel=G.sel===u;
     u.squash*=Math.exp(-raw*11);if(Math.abs(u.squash)<.002)u.squash=0;
@@ -982,7 +1106,7 @@ function frame(now){const raw=Math.min(.05,(now-last)/1000);last=now;const t=now
     if(u.mesh.userData.ring)u.mesh.userData.ring.rotation.z=t*1.5;
     let da=u.faceY-u.mesh.rotation.y;da=Math.atan2(Math.sin(da),Math.cos(da));u.mesh.rotation.y+=da*(1-Math.exp(-raw*14));
     const rdy=G.phase==='play'&&u.team===G.turnPlayer&&!u.played&&!sel&&!(G.bot&&u.team===1);
-    const tm=G.tmark&&G.tmark.get(u.id),tr=u.mesh.userData.tgt;if(tm)tr.material.color.setHex(TMC[tm]);
+    const tm=G.pv.mark.get(u.id)||(G.tmark&&G.tmark.get(u.id)),tr=u.mesh.userData.tgt;if(tm)tr.material.color.setHex(TMC[tm]);
     tr.material.opacity+=(((tm?(tm==='hint'?.5:.95)*(.75+.25*Math.sin(t*7)):0))-tr.material.opacity)*(1-Math.exp(-raw*14));tr.rotation.y=t*1.4;tr.scale.setScalar(tm&&tm!=='hint'?1+Math.sin(t*7)*.07:1);
     const rm=u.mesh.userData.ready;rm.material.opacity+=((rdy?.55+.35*Math.sin(t*5):0)-rm.material.opacity)*(1-Math.exp(-raw*12));rm.scale.setScalar(1+(rdy?Math.sin(t*5)*.06:0));
     u.flash*=Math.exp(-raw*9);const dim=u.played?.45:1;
