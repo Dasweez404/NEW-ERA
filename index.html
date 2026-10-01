@@ -564,7 +564,7 @@ const RAW=[[0,"Néo","Performer",3,4,2,3,5],[1,"Zeus","Brawler",4,3,3,2,5],[2,"H
 const CHARS=RAW.map(([num,name,sub,atk,def,hab,pre,stars])=>{const p=POW[num];
   return{id:'c'+num,num,name,sub,cls:ROLE_CLS[sub],atk,def,hab,pre,stars,power:p?p[0]:null,
   ab:p?p[1]:LIB[sub].ab[num%3],ul:p?p[2]:LIB[sub].ul[Math.floor(num/3)%2]}});
-const SUBTXT={Brawler:'Attaque gagnée : relance son d6 au prochain combat.',Performer:'Défense gagnée : relance le d6 de sa prochaine capacité.',Protector:'Égalité au combat : inflige 1 PV.',Juggernaut:'Le 1er PV ne peut être perdu que par un combat.',Ranger:'Ignore les structures pour attaquer.',Flanker:'Ignore les structures pour se déplacer.',Assist:'Attaque gagnée : d3, 2-3 = soigne un allié de 1 PV. Fin de manche : soigne 1 PV l\'allié blessé le plus proche (≤2 cases). Action Soigner : +1 PV et retire l\'effet.',Engineer:'Défense gagnée : d3, 2-3 = se soigne de 1 PV. Action Soigner : +1 PV et +1 DEF (réparation).'};
+const SUBTXT={Brawler:'Attaque gagnée : relance son d6 au prochain combat.',Performer:'Défense gagnée : relance le d6 de sa prochaine capacité.',Protector:'Égalité au combat : inflige 1 PV.',Juggernaut:'Le 1er PV ne peut être perdu que par un combat.',Ranger:'Ignore les structures pour attaquer.',Flanker:'Ignore les structures pour se déplacer.',Assist:'Attaque gagnée : d3, 2-3 = soigne un allié de 1 PV. Fin de manche : d6 4-6 = soigne 1 PV l\'allié blessé le plus proche (≤2 cases). Action Soigner : d6 1-3 rien, 4-6 +1 PV et retire l\'effet.',Engineer:'Défense gagnée : d3, 2-3 = se soigne de 1 PV. Action Soigner : d6 1-3 rien, 4-6 +1 PV et +1 DEF (réparation).'};
 
 /* Cartes renfort (extra, 1 par tour de personnage) */
 const REIN=[
@@ -968,7 +968,7 @@ async function endRound(){
     if(u.effect.type==='toxic'){log(`${u.d.name} souffre du poison`);const l=--u.effect.left;await dmg(u,1,null);if(u.alive&&l<=0)u.effect=null}
     else if(u.effect.type==='burn'){const r=d6();log(`Brûlure de ${u.d.name} : d6 = ${r}`);if(r<=3){u.effect=null;pop(u,'Éteint','#9cf')}else await dmg(u,1,null)}
     if(G.phase==='over')return}
-  for(const u of G.units)if(u.alive&&sub(u)==='Assist'){const w=alive(u.team).filter(a=>a.hp<4&&cheb(a,u)<=2).sort((a,b)=>a.hp-b.hp)[0];if(w){log(`${u.d.name} (Assist) : présence apaisante`);heal(w,1)}}
+  for(const u of G.units)if(u.alive&&sub(u)==='Assist'){const w=alive(u.team).filter(a=>a.hp<4&&cheb(a,u)<=2).sort((a,b)=>a.hp-b.hp)[0];if(w){const r=d6();log(`${u.d.name} (Assist) : présence apaisante, d6 = <span class="r">${r}</span>`);if(r>=4)heal(w,1)}}
   for(const u of G.units)if(u.alive&&u.d.ab.passive&&u.d.ab.regen&&u.hp<4){log(`${u.d.name} : passif ${u.d.ab.n}`);heal(u,u.d.ab.regen)}
   G.units.forEach(u=>u.buffs=u.buffs.filter(b=>b.until!=='round'));
   await sleep(250);beginRound()}
@@ -997,7 +997,8 @@ async function doAbility(isUlt,tg){const u=G.sel,s=isUlt?u.d.ul:u.d.ab;camFocus(
   await s.run(u,tg);G.chain[u.team]++;await sleep(200);if(G.phase==='over')return;await after()}
 async function doHeal(t){netLog({k:'heal',t:t.id});tutoEv('heal');const u=G.sel;G.busy=true;commit();G.hl=new Map();G.pv={hl:new Map(),mark:new Map()};paintHL();G.actions--;G.used.heal=true;
   log(`<b>${u.d.name}</b> soigne <b>${t.d.name}</b>`);faceTo(u,t);await hop(u,.18,.25);
-  heal(t,1);if(u.d.sub==='Engineer'){addBuff(t,'def',1,'turn',u);pop(t,'+1 DEF','#6aa8ff')}else cleanse(t);
+  const r=d6();pop(u,`d6 : ${r}`,'#ffb42e');log(`${u.d.name} lance un d6 : <span class="r">${r}</span> → ${r>=4?'soin réussi':'rien'}`);await sleep(350);
+  if(r>=4){heal(t,1);if(u.d.sub==='Engineer'){addBuff(t,'def',1,'turn',u);pop(t,'+1 DEF','#6aa8ff')}else cleanse(t)}else pop(t,'Raté','#aaa');
   await sleep(250);await after()}
 async function useCard(i){netLog({k:'card',i});const u=G.sel,c=G.hand[u.team][i];G.busy=true;commit();G.hand[u.team].splice(i,1);G.used.card=true;
   log(`<b>${u.d.name}</b> joue le renfort <span class="r">${c.n}</span>`);await c.use(u);await sleep(200);G.mode='sel';await after()}
@@ -1516,7 +1517,7 @@ const TUTO=[
  {t:'<b>Se déplacer.</b> Touche <kbd>1</kbd> : les cases bleues sont atteignables (HAB 3). Va sur la case entourée (à 2 cases d\'un ennemi, et à 3 cases d\'Apollo) puis valide. Un pion a <b>2 actions</b> par tour.',ok:f=>f.move,focus:()=>({c:4,r:4})},
  {t:'<b>Attaquer.</b> Touche <kbd>2</kbd> : les ennemis en rouge sont à portée (PRE 2). Tu lances 1 d6 + des d3 (ATK) contre la défense adverse (1 d5 + des d3) ; si tu fais plus, il perd 1 PV. Aucun ennemi en rouge ? Rapproche-toi d\'abord.',ok:f=>f.atk,focus:()=>unitByNum(25)},
  {info:1,t:'Le tour se termine <b>automatiquement</b> quand il n\'y a plus d\'action possible (ou avec <kbd>E</kbd>). Les tours alternent ensuite entre les camps : chaque pion joue une fois par <b>manche</b>.'},
- {t:'<b>Soigner.</b> Zeus est blessé ! Sélectionne <b>Apollo</b> (Soutien), touche <kbd>6</kbd> et choisis Zeus (en vert) : +1 PV.',enter:()=>{const z=unitByNum(1);if(z&&z.alive)z.hp=Math.min(z.hp,2);refresh()},ok:f=>f.heal,focus:()=>unitByNum(8)},
+ {t:'<b>Soigner.</b> Zeus est blessé ! Sélectionne <b>Apollo</b> (Soutien), touche <kbd>6</kbd> et choisis Zeus (en vert). Dé : 1-3 rien, 4-6 = +1 PV.',enter:()=>{const z=unitByNum(1);if(z&&z.alive)z.hp=Math.min(z.hp,2);refresh()},ok:f=>f.heal,focus:()=>unitByNum(8)},
  {t:'<b>Capacité spéciale.</b> Apollo a une 2ᵉ action : touche <kbd>3</kbd> pour sa capacité (soigner jusqu\'à 2 alliés). Chaque personnage a une capacité et un ultime, décrits dans le bandeau du bas.',ok:f=>f.abl},
  {info:1,t:'<b>Nouvelle manche.</b> À partir de la manche 2, chaque camp peut lancer <b>un seul ultime</b> pour toute la partie. Les états (Brûlé, Gelé…) sont rappelés dans le panneau « Effets » (<kbd>I</kbd>).'},
  {t:'<b>L\'ultime.</b> Sélectionne <b>Zeus</b>, touche <kbd>4</kbd> puis valide : il frappe tous les ennemis proches.',ok:f=>f.ult,focus:()=>unitByNum(1)},
