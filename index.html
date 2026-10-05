@@ -49,6 +49,7 @@ kbd{font-family:var(--mono);font-weight:700;font-size:11px;background:#0d101a;bo
 #toast.on{opacity:1}
 
 .roster{position:absolute;top:10px;width:212px;display:flex;flex-direction:column;gap:6px;max-height:calc(100% - 300px);overflow:auto}
+body.s4 .uc .st{display:none} body.s4 .uc{padding:3px 8px;min-height:0} body.s4 .uc .nm{font-size:12px} body.s4 .roster{gap:3px} body.s4 .uc .fx{display:none} .own{font-style:normal;color:var(--amber);font-size:10px;margin-left:4px}
 #rosterW{left:10px} #rosterB{right:10px}
 .rh{font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px;display:flex;justify-content:space-between;align-items:center;padding:2px 4px;color:var(--mut)}
 .rh b{color:var(--txt)}
@@ -207,11 +208,14 @@ body.mobile kbd{display:none}
 const $=s=>document.querySelector(s);
 let N=10,OFF=4.5,PB=6;const TEAMS=['Blancs','Noirs'],KEY=(c,r)=>c+','+r,DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
 /* plateaux : Classique 8×8 · Arène 9×9 (1 case de plus, 2 jetons) · Grande arène 10×10 (2 cases de plus, 3 jetons) */
+const MEGAS=(b=>[...b,...b.map(k=>{const[c,r]=k.split(',');return(13-c)+','+(13-r)})])(['2,4','3,4','6,3','7,3','10,4','11,4','5,6','8,6','4,2','9,2','1,6','12,6']);
 const BOARDS=[
  {id:'classique',n:'Classique 8×8',N:8,tokens:1,struct:['1,3','2,3','5,4','6,4','2,5','2,6','5,2','5,1'],spawn:[[[1,6],[3,7],[4,7],[6,6]],[[1,1],[3,0],[4,0],[6,1]]],center:[[3,3],[4,3],[3,4],[4,4]]},
  {id:'arene',n:'Arène 9×9',N:9,tokens:2,struct:['1,3','2,3','7,5','6,5','6,2','6,1','2,6','2,7','3,5','5,3','4,1','4,7'],spawn:[[[1,7],[3,8],[5,8],[7,7]],[[7,1],[5,0],[3,0],[1,1]]],center:[[4,4]]},
- {id:'grande',n:'Grande arène 10×10',N:10,tokens:3,struct:['2,4','3,4','6,5','7,5','7,2','7,3','2,6','2,7','4,1','5,8','8,5','1,4'],spawn:[[[1,8],[4,9],[5,9],[8,8]],[[8,1],[5,0],[4,0],[1,1]]],center:[[4,4],[5,4],[4,5],[5,5]]}
+ {id:'grande',n:'Grande arène 10×10',N:10,tokens:3,struct:['2,4','3,4','6,5','7,5','7,2','7,3','2,6','2,7','4,1','5,8','8,5','1,4'],spawn:[[[1,8],[4,9],[5,9],[8,8]],[[8,1],[5,0],[4,0],[1,1]]],center:[[4,4],[5,4],[4,5],[5,5]]},
+ {id:'mega',n:'Méga-arène 14×14',N:14,tokens:5,struct:MEGAS,spawn:[[[1,12],[3,13],[4,12],[6,13],[7,13],[9,12],[10,13],[12,12]],[[12,1],[10,0],[9,1],[7,0],[6,0],[4,1],[3,0],[1,1]]],center:[[6,6],[7,6],[6,7],[7,7]]}
 ];
+const MEGA=3,NB=3;
 let STRUCT=new Set(BOARDS[2].struct),SPAWN=BOARDS[2].spawn,CENTER=BOARDS[2].center;
 const CLS={A:{n:'Attaque',c:'#ee5b4b',h:0xee5b4b},D:{n:'Défense',c:'#4a8cf0',h:0x4a8cf0},T:{n:'Technique',c:'#3fc48a',h:0x3fc48a},S:{n:'Soutien',c:'#efbf45',h:0xefbf45}};
 const ORDER=['A','D','T','S'];
@@ -577,13 +581,18 @@ const REIN=[
 const newDeck=()=>shuffle([...REIN,...REIN].map(c=>({...c})));
 
 /* ============ ÉTAT ============ */
-const G={defDie:5,mobile:false,mInfo:false,fast:false,online:false,myTeam:0,zones:[],chain:[0,0],multi:[],pv:{hl:new Map(),mark:new Map()},budget:14,bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,phase:'menu',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
-  cur:{c:4,r:8},hl:new Map(),solo:new Set(),tokens:[],board:2,events:true,hand:[[],[]],deck:[[],[]],disc:[[],[]],reinSpec:null,reinIdx:-1,ult:[false,false],
-  picks:[[],[]],dstep:0,dsel:0,pl:0,cardIdx:0,nid:1,over:null};
+const G={defDie:5,mobile:false,mInfo:false,fast:false,online:false,mySeat:0,turnSeat:0,seats:2,names:[],zones:[],chain:[0,0],multi:[],pv:{hl:new Map(),mark:new Map()},budget:14,bot:false,botRun:false,pickTeam:0,ptab:'A',pidx:0,menuSel:0,phase:'menu',variant:true,units:[],round:0,turnPlayer:0,sel:null,mode:'idle',actions:0,used:{},committed:false,busy:false,
+  cur:{c:4,r:8},hl:new Map(),solo:new Set(),tokens:[],board:2,events:true,hand:[[],[]],deck:[[],[]],disc:[[],[]],reinSpec:null,reinIdx:-1,ult:[false,false,false,false],
+  picks:[[],[],[],[]],dstep:0,dsel:0,pl:0,cardIdx:0,nid:1,over:null};
 const inMenus=()=>G.phase==='menu'||G.phase==='pick'||G.phase==='net';
-const ctl=t=>G.online?t===G.myTeam:!(G.bot&&t===1);
+const ctlS=s=>G.online?s===G.mySeat:!(G.bot&&s===1);
+const setTurn=s=>{G.turnSeat=s;G.turnPlayer=s%2};
+const spawnOf=s=>{const L=SPAWN[s%2];return G.seats===4?L.slice((s>>1)*4,(s>>1)*4+4):L.slice(0,4)};
+const seatName=s=>G.names[s]||('J'+(s+1));
+const seatLabel=s=>G.seats===4?`${seatName(s)} (${TEAMS[s%2]})`:TEAMS[s];
+const ownedLeft=s=>G.units.filter(u=>u.alive&&u.owner===s&&!u.played);
 const netBusy=()=>G.online&&(NET.queue.length>0||NET.pumping||NET.catchup);
-const locked=()=>G.phase==='play'&&(G.online?(G.turnPlayer!==G.myTeam||netBusy()):(G.bot&&G.turnPlayer===1));
+const locked=()=>G.phase==='play'&&(G.online?(G.turnSeat!==G.mySeat||netBusy()):(G.bot&&G.turnPlayer===1));
 const alive=t=>G.units.filter(u=>u.alive&&u.team===t);
 const unitAt=(c,r)=>G.units.find(u=>u.alive&&u.c===c&&u.r===r);
 function stat(u,k){let v=u.d[k];for(const b of u.buffs)if(b.k===k)v+=b.v;
@@ -770,7 +779,7 @@ async function lunge(a,t){faceTo(a,t);const p=a.mesh.position.clone(),q=t.mesh.p
 function impact(t,big){t.flash=1;hitStop(big?.12:.08);shakeCam(big?.5:.3);burst(chest(t),0xffd27a,16,{speed:3,up:2.6,size:.13,life:.5});burst(chest(t),0xff5a4a,8,{speed:2,up:2,size:.1});ringFx(t.mesh.position,0xffffff,1.3,.35)}
 
 /* ============ LOGIQUE : UNITÉS, EFFETS, DÉGÂTS ============ */
-function spawnUnit(d,team,c,r){const u={id:G.nid++,d,team,c,r,hp:4,alive:true,played:false,effect:null,buffs:[],timers:[],tempP:[],flags:{},freeAtk:0,squash:0,flash:0,walkA:0,atkA:0,walking:false,faceY:team===0?Math.PI:0};
+function spawnUnit(d,team,c,r,owner){const u={id:G.nid++,d,team,owner:owner==null?team:owner,c,r,hp:4,alive:true,played:false,effect:null,buffs:[],timers:[],tempP:[],flags:{},freeAtk:0,squash:0,flash:0,walkA:0,atkA:0,walking:false,faceY:team===0?Math.PI:0};
   u.mesh=buildUnit(d,team);u.mesh.position.copy(cellPos(c,r));u.mesh.rotation.y=u.faceY;G.units.push(u);return u}
 async function dropIn(u){const to=cellPos(u.c,u.r);u.mesh.position.y=5;u.mesh.scale.set(.8,1.3,.8);
   await tween(.5,k=>{u.mesh.position.y=to.y+(1-ease.bounce(k))*5;u.mesh.scale.set(1,1,1)});u.squash=.4;burst(feet(u),u.team?0x8a90aa:0xffffff,10,{speed:1.6,up:1.2,size:.09,life:.5,g:5});ringFx(to,u.team?0x8a90aa:0xffffff,1.2);shakeCam(.12)}
@@ -802,7 +811,7 @@ async function ko(t,src){camFocus([t,src&&src.mesh?src:null],{min:.6});camPunch(
   checkWin();refresh()}
 function checkWin(){if(G.phase==='over')return;for(const t of[0,1])if(alive(t).length===0){G.phase='over';G.over=1-t;showOver()}}
 /* Renforts : des personnages de réserve. Le porteur lance leur capacité avec SES stats ; un passif s'applique à lui pour un tour. */
-function buildDecks(){const used=new Set([...G.picks[0],...G.picks[1],...G.units.map(u=>u.d)].map(c=>c.num));const pool=shuffle(CHARS.filter(c=>!used.has(c.num)));G.deck=[pool.splice(0,6),pool.splice(0,6)];G.disc=[[],[]]}
+function buildDecks(){const used=new Set([...G.picks.flat(),...G.units.map(u=>u.d)].map(c=>c.num));const pool=shuffle(CHARS.filter(c=>!used.has(c.num))),dn=G.seats===4?8:6;G.deck=[pool.splice(0,dn),pool.splice(0,dn)];G.disc=[[],[]]}
 function drawCard(team,why){if(!G.deck[team].length&&G.disc[team].length)G.deck[team]=shuffle(G.disc[team].splice(0));
   const ch=G.deck[team].pop();if(!ch){toast('Plus de renfort dans la réserve');return}
   const c={n:ch.name,x:`${ch.ab.passive?'Passif · ':''}${ch.ab.n} — ${ch.ab.x}`,ch};G.hand[team].push(c);log(`${TEAMS[team]} appellent un renfort : <b>${ch.name}</b> (${why})`);toast(`${TEAMS[team]} : renfort « ${ch.name} »`);refresh()}
@@ -813,8 +822,8 @@ const tokenIdx=(c,r)=>G.tokens.findIndex(t=>t.c===c&&t.r===r);
 function syncToken(){tokenMs.forEach((g,i)=>{const t=G.tokens[i];g.visible=!!t;if(t)g.position.copy(cellPos(t.c,t.r))})}
 /* placement initial des jetons : centre et/ou paire symétrique selon le plateau */
 function initTokens(){G.tokens=[];const B=BOARDS[G.board]||BOARDS[2];
-  if(B.tokens===1||B.tokens===3){const[c,r]=CENTER[Math.floor(rng()*CENTER.length)];G.tokens.push({c,r})}
-  if(B.tokens>=2){for(let i=0;i<60;i++){const c=1+Math.floor(rng()*(N-2)),r=2+Math.floor(rng()*(N-4)),mc=N-1-c,mr=N-1-r;
+  if(B.tokens%2===1){const[c,r]=CENTER[Math.floor(rng()*CENTER.length)];G.tokens.push({c,r})}
+  for(let pr=0;pr<Math.floor(B.tokens/2);pr++){for(let i=0;i<80;i++){const c=1+Math.floor(rng()*(N-2)),r=2+Math.floor(rng()*(N-4)),mc=N-1-c,mr=N-1-r;
       if((c===mc&&r===mr)||Math.abs(c-OFF)+Math.abs(r-OFF)<2||isStruct(c,r)||isStruct(mc,mr)||G.tokens.some(t=>(t.c===c&&t.r===r)||(t.c===mc&&t.r===mr)))continue;
       G.tokens.push({c,r},{c:mc,r:mr});break}}
   syncToken();log(`Jetons renfort placés (${G.tokens.map(t=>cellName(t.c,t.r)).join(', ')})`)}
@@ -843,7 +852,8 @@ const timerIcon=u=>u.timers.map(t=>(t.kind==='bomb'?'💣':'🌱')+t.left).join(
 /* ============ ÉVÉNEMENTS (zones bonus / malus temporaires) ============ */
 const EV_SRC={id:0,team:-1,d:{name:'Événement'}};
 const EV_BONUS=['heal','haste','power','guard'],EV_MALUS=['fire','gas','ice','storm','smoke','slime'];
-function spawnEvent(){if(!G.events||G.round<2)return;
+function spawnEvent(){if(!G.events||G.round<2)return;for(let k=0;k<(G.seats===4?2:1);k++)spawnEvent1()}
+function spawnEvent1(){
   const bonus=rng()<0.5,list=bonus?EV_BONUS:EV_MALUS,kind=list[Math.floor(rng()*list.length)],shape=rng()<0.5?'square':'plus',rad=shape==='square'?1:2;
   for(let i=0;i<40;i++){const c=1+Math.floor(rng()*(N-2)),r=2+Math.floor(rng()*(N-4));
     if(G.zones.some(z=>z.src===EV_SRC&&z.keys.has(KEY(c,r))))continue;
@@ -938,9 +948,9 @@ async function combat0(att,def){
   if(sub(att)==='Protector')await dmg(def,1,att,true);else if(sub(def)==='Protector')await dmg(att,1,def,true);return'tie'}
 
 /* ============ TOURS ============ */
-function beginRound(){camOverview();G.round++;G.chain=[0,0];spawnEvent();netChk();G.turnPlayer=(G.round-1)%2;G.units.forEach(u=>u.played=false);G.sel=null;G.mode='idle';
-  log(`<span class="r">— Manche ${G.round} —</span> ${TEAMS[G.turnPlayer]} commencent`);focusNext();refresh()}
-function focusNext(){const u=alive(G.turnPlayer).find(x=>!x.played);if(u){G.cur={c:u.c,r:u.r};if(G.phase==='play'&&ctl(G.turnPlayer))camFocus([u])}}
+function beginRound(){camOverview();G.round++;G.chain=[0,0];spawnEvent();netChk();setTurn((G.round-1)%G.seats);G.units.forEach(u=>u.played=false);G.sel=null;G.mode='idle';
+  log(`<span class="r">— Manche ${G.round} —</span> ${G.seats===4?seatName(G.turnSeat)+' ('+TEAMS[G.turnPlayer]+') commence':TEAMS[G.turnPlayer]+' commencent'}`);focusNext();refresh()}
+function focusNext(){const u=ownedLeft(G.turnSeat)[0];if(u){G.cur={c:u.c,r:u.r};if(G.phase==='play'&&ctlS(G.turnSeat))camFocus([u])}}
 function selectUnit(u){camFocus([u]);netLog({k:'sel',id:u.id});tutoEv('sel',u.d.num);hop(u,.3,.32);ringFx(u.mesh.position,0xffb42e,1.1,.4);G.sel=u;G.reinSpec=null;G.reinIdx=-1;G.committed=false;G.used={move:false,atk:false,abl:false,card:false};
   G.actions=(u.effect&&u.effect.type==='stun')?1:2;G.mode=(u.effect&&u.effect.type==='frozen')?'frozen':'sel';
   if(G.actions===1)toast('Assommé : une seule action ce tour');recalc();refresh()}
@@ -954,8 +964,8 @@ async function endTurn(){const u=G.sel;if(!u||G.busy&&false)return;G.busy=true;
   u.played=true;u.buffs=u.buffs.filter(b=>b.until!=='self');u.freeAtk=0;
   if(u.effect&&['stun','numb','disrupt','jam','frozen'].includes(u.effect.type))u.effect=null;
   G.sel=null;G.mode='idle';G.hl=new Map();
-  const other=1-G.turnPlayer,av=t=>alive(t).some(x=>!x.played);
-  if(av(other))G.turnPlayer=other;else if(!av(G.turnPlayer)){await endRound()}
+  let nx=-1;for(let i=1;i<=G.seats;i++){const sd=(G.turnSeat+i)%G.seats;if(ownedLeft(sd).length){nx=sd;break}}
+  if(nx>=0)setTurn(nx);else await endRound();
   if(G.phase==='over'){G.busy=false;return}
   focusNext();G.busy=false;recalc();refresh()}
 async function endRound(){
@@ -987,7 +997,7 @@ function can(cmd){const u=G.sel;if(!u)return[false,'Aucun personnage'];if(G.mode
    case'atk':if(u.freeAtk>0)return attackTargets(u).length?[true]:[false,'Personne à portée'];if(G.used.atk)return[false,'Déjà attaqué'];if(G.actions<=0)return[false,'Plus d\'actions'];
      return attackTargets(u).length?[true]:[false,'Personne à portée'];
    case'abl':case'ult':{const s=cmd==='abl'?u.d.ab:u.d.ul;if(s.passive)return[false,'Passif : toujours actif'];if(G.used.abl)return[false,'Capacité déjà utilisée'];if(G.actions<=0)return[false,'Plus d\'actions'];if(eff==='disrupt')return[false,'Bouleversement'];
-     if(cmd==='ult'){if(G.round<2)return[false,'Dès la manche 2'];if(G.ult[u.team])return[false,'Ultime déjà utilisé']}
+     if(cmd==='ult'){if(G.round<2)return[false,'Dès la manche 2'];if(G.ult[u.owner])return[false,'Ultime déjà utilisé']}
      return targetsFor(u,s).length?[true]:[false,'Aucune cible']}
    case'heal':{if(u.d.cls!=='S')return[false,'Réservé au Soutien'];if(G.used.heal)return[false,'Déjà soigné ce tour'];if(G.actions<=0)return[false,'Plus d\'actions'];return healTargets(u).length?[true]:[false,'Aucun allié blessé à portée']}
    case'card':if(G.used.card)return[false,'1 renfort par tour'];if(!G.hand[u.team].length)return[false,'Aucun renfort'];if(eff==='jam')return[false,'Brouillage'];return[true]}}
@@ -999,7 +1009,7 @@ async function doAttack(t,solo){netLog({k:'atk',t:t.id,solo:!!solo});const u=G.s
   if(solo)G.actions=0;await combat(u,t);await after()}
 async function doAbility(isUlt,tg){const u=G.sel,rein=!isUlt&&!!G.reinSpec,ri=G.reinIdx,s=isUlt?u.d.ul:abSpec(u);camFocus(tgPoints(u,tg),{min:.6});if(isUlt)camPunch(1800,.95,.9);netLog({k:'abl',u:!!isUlt,t:serTarget(s,tg),rc:rein?ri:undefined});tutoEv(isUlt?'ult':rein?'rein':'abl');G.busy=true;commit();G.hl=new Map();paintHL();
   if(rein){const c=G.hand[u.team].splice(ri,1)[0];G.disc[u.team].push(c.ch);G.used.card=true;log(`<b>${u.d.name}</b> appelle <b>${c.ch.name}</b> en renfort : <span class="r">${s.n}</span>`);pop(u,'Renfort · '+c.ch.name,'#d9b8ff');ringFx(u.mesh.position,0xd9b8ff,1.5,.5)}
-  else{G.actions--;G.used.abl=true;if(isUlt)G.ult[u.team]=true;log(`<b>${u.d.name}</b> utilise ${isUlt?'l\'ultime ':''}<span class="r">${s.n}</span>`);pop(u,s.n,'#d9b8ff')}
+  else{G.actions--;G.used.abl=true;if(isUlt)G.ult[u.owner]=true;log(`<b>${u.d.name}</b> utilise ${isUlt?'l\'ultime ':''}<span class="r">${s.n}</span>`);pop(u,s.n,'#d9b8ff')}
   G.reinSpec=null;G.reinIdx=-1;
   await s.run(u,tg);G.chain[u.team]++;await sleep(200);if(G.phase==='over')return;await after()}
 async function doHeal(t){netLog({k:'heal',t:t.id});tutoEv('heal');const u=G.sel;G.busy=true;commit();G.hl=new Map();G.pv={hl:new Map(),mark:new Map()};paintHL();G.actions--;G.used.heal=true;
@@ -1022,7 +1032,7 @@ function areaCells(u,f){const out=[];for(let r=0;r<N;r++)for(let c=0;c<N;c++){if
   else if(f.t==='none'){const rad=typeof f.rad==='function'?f.rad(u):f.rad;ok=rad<99&&cheb(u,cell)<=rad}
   if(ok)out.push(KEY(c,r))}return out}
 function recalc(){G.hl=new Map();G.solo=new Set();G.tmark=new Map();G.tcount=null;
-  if(G.phase==='place'){const team=G.pl%2;SPAWN[team].forEach(([c,r])=>{if(!unitAt(c,r))G.hl.set(KEY(c,r),'place')});paintHL();return}
+  if(G.phase==='place'){spawnOf(G.pl%G.seats).forEach(([c,r])=>{if(!unitAt(c,r))G.hl.set(KEY(c,r),'place')});paintHL();return}
   const u=G.sel;if(!u||G.phase!=='play'){paintHL();return}
   const area=(f,t)=>{for(const k of areaCells(u,f))if(!G.hl.has(k))G.hl.set(k,t)};
   if(G.mode==='sel'&&can('atk')[0])for(const{t} of attackTargets(u))G.tmark.set(t.id,'hint');
@@ -1053,18 +1063,18 @@ function refresh(){
   refreshPreview();renderCoach();
   if(inMenus()){$('#dock').style.display='none';renderTop();renderRosters();return}
   $('#dock').style.display='grid';renderTop();renderRosters();renderDock()}
-function netChip(){if(!G.online)return'';const d=NET.doc,oid=d&&(NET.team===0?d.guestId:d.hostId),on=peerOn(oid);
-  return` <span class="netchip">${NET.desync?'<b style="color:#ff6b6b">⚠ Désynchronisation détectée</b> · ':''}${NET.roomCap?`<span class="dotp ${on?'on':''}"></span> adversaire ${on?'connecté':'hors ligne'} · `:''}<button class="btn" id="netQuit" style="pointer-events:auto;display:inline-flex;padding:1px 8px;font-size:11px">${NET.quitArm>Date.now()?'Confirmer ?':'Quitter'}</button></span>`}
+function netChip(){if(!G.online)return'';const d=NET.doc,M=(d&&d.mode)||2,others=[...Array(M).keys()].filter(i=>i!==NET.seat),nOn=others.filter(i=>peerOn(d&&d['id'+i])).length,on=nOn===others.length;
+  return` <span class="netchip">${NET.desync?'<b style="color:#ff6b6b">⚠ Désynchronisation détectée</b> · ':''}${NET.roomCap?`<span class="dotp ${on?'on':''}"></span> ${M===2?'adversaire '+(on?'connecté':'hors ligne'):'joueurs connectés '+(nOn+1)+'/'+M} · `:''}<button class="btn" id="netQuit" style="pointer-events:auto;display:inline-flex;padding:1px 8px;font-size:11px">${NET.quitArm>Date.now()?'Confirmer ?':'Quitter'}</button></span>`}
 function bindQuit(){const q=$('#netQuit');if(q)q.onclick=()=>{if(NET.quitArm>Date.now()){netLeave(true)}else{NET.quitArm=Date.now()+3000;renderTop()}}}
 function renderTop(){
   const b=$('#banner'),h=$('#hint'),pv=b.innerHTML;setTimeout(()=>{if(b.innerHTML!==pv&&pv){b.classList.remove('flash');void b.offsetWidth;b.classList.add('flash')}},0);
   if(inMenus()){b.innerHTML='<b>Sélection des personnages</b>';h.innerHTML='';return}
-  if(G.phase==='place'){const t=G.pl%2,d=G.picks[t][Math.floor(G.pl/2)];b.innerHTML=`<span class="dot t${t}"></span>Placement · ${TEAMS[t]}`;if(G.online&&t!==G.myTeam){h.innerHTML='En attente du placement adverse…';return}
+  if(G.phase==='place'){const sd=G.pl%G.seats,t=sd%2,d=G.picks[sd][Math.floor(G.pl/G.seats)];b.innerHTML=`<span class="dot t${t}"></span>Placement · ${seatLabel(sd)}`;if(G.online&&sd!==G.mySeat){h.innerHTML='En attente du placement adverse…';return}
     h.innerHTML=`Place <b>${d.name}</b> sur une case jaune : <kbd>←↑↓→</kbd> puis <kbd>Entrée</kbd> · <kbd>X</kbd> placement auto`;return}
   if(G.phase==='over'){b.innerHTML='<b>Partie terminée</b>';h.innerHTML='';return}
-  b.innerHTML=`<span>Manche ${G.round}</span>${G.chain[G.turnPlayer]?`<span class="chain">⛓ Chaîne ×${G.chain[G.turnPlayer]}</span>`:''}<span class="dot t${G.turnPlayer}"></span><span>Tour des ${TEAMS[G.turnPlayer]}${G.bot&&G.turnPlayer===1?' (bot)':''}</span>`;
+  b.innerHTML=`<span>Manche ${G.round}</span>${G.chain[G.turnPlayer]?`<span class="chain">⛓ Chaîne ×${G.chain[G.turnPlayer]}</span>`:''}<span class="dot t${G.turnPlayer}"></span><span>${G.seats===4?'Tour de '+seatLabel(G.turnSeat):'Tour des '+TEAMS[G.turnPlayer]}${G.bot&&G.turnPlayer===1?' (bot)':''}</span>`;
   const m=G.mode,u=G.sel;let t='';
-  if(m==='idle'&&G.online&&G.turnPlayer!==G.myTeam)t='Tour de l\'adversaire…';
+  if(m==='idle'&&G.online&&G.turnSeat!==G.mySeat)t=G.seats===4?'Tour de '+seatName(G.turnSeat)+'…':'Tour de l\'adversaire…';
   else if(m==='idle'&&G.bot&&G.turnPlayer===1)t='Le bot réfléchit…';
   else if(m==='idle')t=`Choisis un personnage <kbd>Entrée</kbd> ou <kbd>Tab</kbd> pour passer au suivant`;
   else if(m==='frozen')t=`${u.d.name} est gelé 🧊 : <kbd>F</kbd> briser la glace (−1 PV) et jouer · <kbd>E</kbd> passer son tour`;
@@ -1078,9 +1088,9 @@ function renderTop(){
   else if(m==='heal')t=`<b style="color:#3ee08a">${G.tcount} allié${G.tcount>1?'s':''} à soigner</b> (vert) · <kbd>Entrée</kbd> soigner · <kbd>Échap</kbd> annuler`;
   else if(m==='card')t='<kbd>↑↓</kbd> choisir · <kbd>Entrée</kbd> jouer · <kbd>Échap</kbd> annuler';
   h.innerHTML=(G.mobile&&G.phase==='play'?mobHint():t)+netChip();bindQuit()}
-const isReady=u=>G.phase==='play'&&u.alive&&u.team===G.turnPlayer&&!u.played&&ctl(u.team);
+const isReady=u=>G.phase==='play'&&u.alive&&u.owner===G.turnSeat&&!u.played&&ctlS(u.owner);
 function ucHTML(u){return`<div class="uc ${G.sel===u?'sel':''} ${isReady(u)?'ready':''} ${u.played&&u.alive?'played':''} ${u.alive?'':'dead'}" data-id="${u.id}" style="--cc:${CLS[u.d.cls].c}">
-  <div class="nm">${u.d.name}${u.effect?` <span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span>`:''}<small>${u.d.sub}</small></div><div class="hp">${hearts(u)}</div>
+  <div class="nm">${u.d.name}${u.effect?` <span class="fxi" title="${EFF[u.effect.type][1]}">${fxIcon(u)}</span>`:''}<small>${u.d.sub}</small>${G.seats===4?`<em class="own">${esc(seatName(u.owner))}</em>`:''}</div><div class="hp">${hearts(u)}</div>
   <div class="st">ATK ${stat(u,'atk')} DEF ${stat(u,'def')} HAB ${stat(u,'hab')} PRE ${stat(u,'pre')}</div><div class="fx">${u.played&&u.alive?'✔':''}</div></div>`}
 const FXREF=[['toxic','Poison : −1 PV à chaque fin de manche (2 manches), retiré par un soin.'],['stun','Une seule action à son prochain tour.'],['burn','Fin de manche, d6 : 1-3 s\'éteint, 4-6 −1 PV.'],['numb','Ne peut pas se déplacer.'],['disrupt','Ne peut pas utiliser de capacité ni d\'ultime.'],['jam','Ne peut pas jouer de carte renfort.'],['frozen','Passe son tour ou sacrifie 1 PV pour jouer.']];
 function renderFxRef(){const el=$('#fxref');if(!el)return;const on=k=>G.units.filter(u=>u.alive&&u.effect&&u.effect.type===k).length;
@@ -1093,8 +1103,8 @@ function renderFxRef(){const el=$('#fxref');if(!el)return;const on=k=>G.units.fi
    +`<div class="fxr"><i>ℹ️</i><span><b>Règles</b></span><span>1 effet max par personnage ; ils se dissipent après son prochain tour.</span></div>`;
   el.innerHTML=`<div class="fxr-h" id="fxh"><span>Effets</span><kbd>I</kbd></div>`+rows;$('#fxh').onclick=()=>el.classList.toggle('min');
   el.style.display=inMenus()?'none':''}
-function renderRosters(){renderFxRef();[0,1].forEach(t=>{const us=G.units.filter(u=>u.team===t);
-  $(t?'#rosterB':'#rosterW').innerHTML=`<div class="rh"><b>${TEAMS[t]}</b><span>Renforts : ${G.hand[t].length} · Ult ${G.ult[t]?'✖':'✔'}</span></div>`+us.map(ucHTML).join('')})
+function renderRosters(){renderFxRef();document.body.classList.toggle('s4',G.seats===4);[0,1].forEach(t=>{const us=G.units.filter(u=>u.team===t);
+  $(t?'#rosterB':'#rosterW').innerHTML=`<div class="rh"><b>${TEAMS[t]}</b><span>Renforts : ${G.hand[t].length} · Ult ${G.seats===4?[t,t+2].map(sd=>'J'+(sd+1)+(G.ult[sd]?'✖':'✔')).join(' '):(G.ult[t]?'✖':'✔')}</span></div>`+us.map(ucHTML).join('')})
   document.querySelectorAll('.uc').forEach(el=>el.onclick=()=>{const u=G.units.find(x=>x.id==el.dataset.id);if(!u)return;G.cur={c:u.c,r:u.r};if(G.phase==='play'&&!G.busy&&G.mode==='idle')confirmAct()})}
 function renderDock(){
   const insp=G.sel||(G.phase==='play'?unitAt(G.cur.c,G.cur.r):null),info=$('#info'),acts=$('#acts'),pips=$('#pips'),cards=$('#cards');
@@ -1123,34 +1133,35 @@ function renderKeys(){const K=[['←↑↓→ / WASD','Curseur'],['Entrée / Esp
   $('#keys').innerHTML='<div class="kh"><span>Contrôles</span><kbd>H</kbd></div>'+K.map(([k,t])=>`<kbd>${k}</kbd><span>${t}</span>`).join('')}
 
 /* ============ MENU, SÉLECTION & PLACEMENT ============ */
-function resetGame(){G.zones=[];G.chain=[0,0];G.multi=[];syncZones();G.units.forEach(u=>scene.remove(u.mesh));G.units=[];G.picks=[[],[]];G.round=0;G.hand=[[],[]];G.deck=[[],[]];G.disc=[[],[]];G.reinSpec=null;G.reinIdx=-1;G.ult=[false,false];G.sel=null;G.mode='idle';G.tokens=[];G.over=null;G.busy=false;G.botRun=false;
+function resetGame(){G.zones=[];G.chain=[0,0];G.multi=[];syncZones();G.units.forEach(u=>scene.remove(u.mesh));G.units=[];G.picks=[[],[],[],[]];G.round=0;G.hand=[[],[]];G.deck=[[],[]];G.disc=[[],[]];G.reinSpec=null;G.reinIdx=-1;G.ult=[false,false,false,false];G.sel=null;G.mode='idle';G.tokens=[];G.over=null;G.busy=false;G.botRun=false;
   $('#log').innerHTML='';$('#dice').hidden=true;G.hl=new Map();paintHL();syncToken()}
-function startMenu(){$('#keys').classList.remove('min');G.online=false;G.fast=false;G.tuto=null;resetGame();G.phase='menu';G.menuSel=G.lastMode==null?0:G.lastMode;showMenu();refresh()}
+function startMenu(){$('#keys').classList.remove('min');G.online=false;G.seats=2;G.mySeat=0;G.fast=false;G.tuto=null;resetGame();G.phase='menu';G.menuSel=G.lastMode==null?0:G.lastMode;showMenu();refresh()}
 function showMenu(){const ov=$('#overlay');ov.className='on';
-  const M=[['Tutoriel','Apprends les bases en jouant une partie guidée contre des pions inoffensifs. Recommandé pour commencer.'],['Deux joueurs','Blancs et Noirs jouent chacun leur tour sur le même clavier.'],['Contre le bot','Tu joues les Blancs. Le bot (niveau facile) joue les Noirs : il hésite, se trompe et attaque sans stratégie.'],['En ligne','Crée un salon protégé par mot de passe ou rejoins celui d\'un ami. Chacun joue depuis son écran.']];
+  const M=[['Tutoriel','Apprends les bases en jouant une partie guidée contre des pions inoffensifs. Recommandé pour commencer.'],['Contre le bot','Tu joues les Blancs. Le bot (niveau facile) joue les Noirs : il hésite, se trompe et attaque sans stratégie.'],['Deux joueurs','Un joueur héberge un salon (mot de passe facultatif), l\'autre le rejoint. Chacun joue depuis son écran : 4 personnages chacun.'],['Quatre joueurs','Un joueur héberge, trois le rejoignent : 2 contre 2 sur une méga-arène 14×14 (surface doublée). Chacun contrôle 4 personnages, deux alliés par camp.']];
   ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> Arena</h1><p>Duel tactique au tour par tour. Chaque camp compose une équipe de 4 personnages, un par classe. Les Blancs ont un socle rond, les Noirs un socle carré.</p>
    <div class="modes">${M.map((m,i)=>`<div class="mode ${G.menuSel===i?'sel':''}" data-m="${i}"><h2><kbd>${i+1}</kbd> ${m[0]}${i===0?' <span class="chip" style="--cc:var(--amber)">conseillé</span>':''}</h2><p>${m[1]}</p></div>`).join('')}</div>
-   <div class="ovbar"><span><kbd>←</kbd> <kbd>→</kbd> choisir</span><span><kbd>Entrée</kbd> continuer</span><button class="btn" id="mVar"><kbd>B</kbd> Variante avancée : <b>${G.variant?'ACTIVE':'désactivée'}</b></button><button class="btn" id="mBud"><kbd>L</kbd> Équilibrage : <b>${BUDGETS.find(b=>b[0]===G.budget)[1]}</b></button><button class="btn" id="mBoard"><kbd>P</kbd> Plateau : <b>${BOARDS[G.board].n} · ${BOARDS[G.board].tokens} jeton${BOARDS[G.board].tokens>1?'s':''}</b></button><button class="btn" id="mEvt"><kbd>E</kbd> Événements : <b>${G.events?'ACTIVÉS':'désactivés'}</b></button><button class="btn" id="mDef"><kbd>F</kbd> Dé de défense : <b>d${G.defDie}</b></button><button class="btn" id="mMob"><kbd>M</kbd> ${G.mobile?'🖥 Mode PC':'📱 Mode mobile'}</button></div><p style="margin-top:10px">Chaque personnage vaut de 1 à 5 étoiles. Le total d'étoiles d'une équipe ne peut pas dépasser la limite : les deux camps ont le même budget.</p></div>`;
+   <div class="ovbar"><span><kbd>←</kbd> <kbd>→</kbd> choisir</span><span><kbd>Entrée</kbd> continuer</span><button class="btn" id="mVar"><kbd>B</kbd> Variante avancée : <b>${G.variant?'ACTIVE':'désactivée'}</b></button><button class="btn" id="mBud"><kbd>L</kbd> Équilibrage : <b>${BUDGETS.find(b=>b[0]===G.budget)[1]}</b></button><button class="btn" id="mBoard"><kbd>P</kbd> Plateau : <b>${BOARDS[G.board].n} · ${BOARDS[G.board].tokens} jeton${BOARDS[G.board].tokens>1?'s':''}</b></button><button class="btn" id="mEvt"><kbd>E</kbd> Événements : <b>${G.events?'ACTIVÉS':'désactivés'}</b></button><button class="btn" id="mDef"><kbd>F</kbd> Dé de défense : <b>d${G.defDie}</b></button><button class="btn" id="mLoc"><kbd>H</kbd> Deux joueurs sur cet écran</button><button class="btn" id="mMob"><kbd>M</kbd> ${G.mobile?'🖥 Mode PC':'📱 Mode mobile'}</button></div><p style="margin-top:10px">Chaque personnage vaut de 1 à 5 étoiles. Le total d'étoiles d'une équipe ne peut pas dépasser la limite : les deux camps ont le même budget.</p></div>`;
   ov.querySelectorAll('.mode').forEach(el=>el.onclick=()=>{G.menuSel=+el.dataset.m;menuGo()});
-  $('#mVar').onclick=()=>{G.variant=!G.variant;showMenu()};$('#mDef').onclick=cycleDef;$('#mBoard').onclick=cycleBoard;$('#mEvt').onclick=toggleEvents;$('#mBud').onclick=()=>{const i=BUDGETS.findIndex(b=>b[0]===G.budget);G.budget=BUDGETS[(i+1)%BUDGETS.length][0];showMenu()};$('#mMob').onclick=()=>setMobile(!G.mobile)}
+  $('#mVar').onclick=()=>{G.variant=!G.variant;showMenu()};$('#mDef').onclick=cycleDef;$('#mBoard').onclick=cycleBoard;$('#mEvt').onclick=toggleEvents;$('#mBud').onclick=()=>{const i=BUDGETS.findIndex(b=>b[0]===G.budget);G.budget=BUDGETS[(i+1)%BUDGETS.length][0];showMenu()};$('#mMob').onclick=()=>setMobile(!G.mobile);$('#mLoc').onclick=menuLocal}
 const DEFS=[6,5,4];
-function cycleBoard(){G.board=(G.board+1)%BOARDS.length;lsSet('ne_board',String(G.board));showMenu()}
+function cycleBoard(){G.board=(G.board+1)%NB;lsSet('ne_board',String(G.board));showMenu()}
 function toggleEvents(){G.events=!G.events;lsSet('ne_events',G.events?'1':'0');showMenu()}
 function cycleDef(){G.defDie=DEFS[(DEFS.indexOf(G.defDie)+1)%3];lsSet('ne_def',String(G.defDie));showMenu()}
-function menuGo(){G.lastMode=G.menuSel;if(G.menuSel===0){startTuto();return}if(G.menuSel===3){netHome();return}G.online=false;G.tuto=null;G.bot=G.menuSel===2;startPick()}
-function startPick(){G.phase='pick';G.pickTeam=0;G.ptab='A';G.pidx=0;G.picks=[[],[]];showPick();refresh()}
+function menuGo(){G.lastMode=G.menuSel;G.seats=2;if(G.menuSel===0){startTuto();return}if(G.menuSel>=2){netHome(G.menuSel===3?4:2);return}G.online=false;G.tuto=null;G.bot=true;startPick()}
+function menuLocal(){G.seats=2;G.online=false;G.tuto=null;G.bot=false;startPick()}
+function startPick(){G.phase='pick';G.pickTeam=0;G.ptab='A';G.pidx=0;G.picks=[[],[],[],[]];showPick();refresh()}
 const BUDGETS=[[99,'Libre'],[16,'Large · 16 ★'],[14,'Standard · 14 ★'],[12,'Strict · 12 ★']];
 const teamStars=(t,except)=>G.picks[t].filter(x=>x.cls!==except).reduce((a,x)=>a+x.stars,0);
 const minStars=(cls,t)=>Math.min(...poolOf(cls).filter(d=>{const o=takenBy(d);return o<0||o===t}).map(d=>d.stars));
 function canPick(d,t){let tot=teamStars(t,d.cls)+d.stars;for(const c of ORDER)if(c!==d.cls&&!G.picks[t].some(x=>x.cls===c))tot+=minStars(c,t);return tot<=G.budget}
-const takenBy=d=>G.picks[0].includes(d)?0:G.picks[1].includes(d)?1:-1;
+const takenBy=d=>G.picks.findIndex(a=>a.includes(d));
 const poolOf=c=>CHARS.filter(d=>d.cls===c);
 function showPick(){const ov=$('#overlay');ov.className='on';const t=G.pickTeam,mine=G.picks[t],list=poolOf(G.ptab);G.pidx=Math.max(0,Math.min(list.length-1,G.pidx));const cur=list[G.pidx];
   const prevScroll=(ov.querySelector('.pgrid')||{}).scrollTop||0;
   const slot=c=>{const d=mine.find(x=>x.cls===c);return`<div class="slot ${d?'':'empty'}" style="--cc:${CLS[c].c}"><small>${CLS[c].n}</small>${d?`<b>${d.name}</b>`:'—'}</div>`};
   const stt=d=>'★'.repeat(d.stars);
   const st=d=>`<span class="sv"><i style="color:#ee7b6e">${d.atk}</i><i style="color:#6aa8ff">${d.def}</i><i style="color:#c48cff">${d.hab}</i><i style="color:#ffd05a">${d.pre}</i><i class="pcs">${stt(d)}</i></span>`;
-  ov.innerHTML=`<div class="ov pk"><div class="pkhead"><h1>${t===0?'Blancs':'Noirs'} <span>: compose ton équipe</span><span class="bud ${teamStars(t)>G.budget?'over':''}">★ ${teamStars(t)}${G.budget<99?' / '+G.budget:''}</span></h1>
+  ov.innerHTML=`<div class="ov pk"><div class="pkhead"><h1>${G.seats===4?seatLabel(t):TEAMS[t]} <span>: compose ${G.seats===4?'tes 4 personnages':'ton équipe'}</span><span class="bud ${teamStars(t)>G.budget?'over':''}">★ ${teamStars(t)}${G.budget<99?' / '+G.budget:''}</span></h1>
    <div class="slots">${ORDER.map(slot).join('')}</div>
    <div class="tabs">${ORDER.map((c,i)=>`<button class="tab ${c===G.ptab?'on':''}" data-c="${c}" style="--cc:${CLS[c].c}"><kbd>${i+1}</kbd> ${CLS[c].n}</button>`).join('')}<span class="grow"></span>
    <button class="btn" id="pRand"><kbd>R</kbd>Au hasard</button><button class="btn" id="pOk" ${mine.length===4?'':'disabled'}><kbd>C</kbd>Valider l'équipe</button></div></div>
@@ -1184,15 +1195,15 @@ function pickKey(k,e){if(G.online){if(NET.confirmed)return;if(k==='escape'){G.ph
   else if(k==='backspace'||k==='delete'){G.picks[G.pickTeam]=G.picks[G.pickTeam].filter(x=>x.cls!==G.ptab)}
   else if(k==='r'){pickRandom();return}else if(k==='c'){pickConfirm();return}else return;
   showPick()}
-function startPlacement(){applyBoard(G.board);buildDecks();camOverview();G.phase='place';G.pl=0;const t=0;G.cur={c:SPAWN[t][0][0],r:SPAWN[t][0][1]};recalc();refresh();log('Placement : choisis la case de départ de chaque personnage')}
+function startPlacement(){applyBoard(G.seats===4?MEGA:G.board);buildDecks();camOverview();G.phase='place';G.pl=0;G.cur={c:spawnOf(0)[0][0],r:spawnOf(0)[0][1]};recalc();refresh();log('Placement : choisis la case de départ de chaque personnage')}
 function placeHere(c,r){if(G.hl.get(KEY(c,r))!=='place'){toast('Choisis une case jaune');return}
-  if(G.online&&!NET.replaying&&G.pl%2!==G.myTeam){toast('Ce n\'est pas ton placement');return}
+  if(G.online&&!NET.replaying&&G.pl%G.seats!==G.mySeat){toast('Ce n\'est pas ton placement');return}
   netLog({k:'place',c,r});
-  const t=G.pl%2,d=G.picks[t][Math.floor(G.pl/2)];dropIn(spawnUnit(d,t,c,r));G.pl++;
+  const sd=G.pl%G.seats,t=sd%2,d=G.picks[sd][Math.floor(G.pl/G.seats)];dropIn(spawnUnit(d,t,c,r,sd));G.pl++;
   if(G.bot&&G.pl%2===1&&G.pl<8){const fr=shuffle(SPAWN[1].filter(([a,b])=>!unitAt(a,b)))[0];G.hl.set(KEY(fr[0],fr[1]),'place');placeHere(fr[0],fr[1]);return}
-  if(G.pl>=8){G.phase='play';initTokens();beginRound();recalc();return}
-  const nt=G.pl%2;G.cur={c:SPAWN[nt][0][0],r:SPAWN[nt][0][1]};recalc();refresh()}
-function autoPlace(){while(G.phase==='place'){const t=G.pl%2,free=SPAWN[t].find(([c,r])=>!unitAt(c,r));G.hl.set(KEY(free[0],free[1]),'place');placeHere(free[0],free[1])}}
+  if(G.pl>=G.seats*4){G.phase='play';initTokens();beginRound();recalc();return}
+  const nt=spawnOf(G.pl%G.seats);G.cur={c:nt[0][0],r:nt[0][1]};recalc();refresh()}
+function autoPlace(){while(G.phase==='place'){const free=spawnOf(G.pl%G.seats).find(([c,r])=>!unitAt(c,r));G.hl.set(KEY(free[0],free[1]),'place');placeHere(free[0],free[1])}}
 function showOver(){netOver();const ov=$('#overlay');ov.className='on';
   if(G.tuto){ov.innerHTML=`<div class="ov"><div class="big">Tutoriel <span style="color:var(--amber)">terminé</span> !</div><p style="text-align:center">Tu connais les bases. Compose maintenant ton équipe : deux joueurs, contre le bot ou en ligne.</p><p style="text-align:center"><kbd>Entrée</kbd> pour revenir au menu</p></div>`;return}
   ov.innerHTML=`<div class="ov"><div class="big">Victoire des <span style="color:var(--amber)">${TEAMS[G.over]}</span></div><p style="text-align:center">Tous les personnages adverses sont éliminés.</p><p style="text-align:center"><kbd>Entrée</kbd> pour rejouer</p></div>`}
@@ -1261,10 +1272,10 @@ async function confirmAct(){
   if(G.busy)return;if(locked())return;const{c,r}=G.cur;
   if(G.phase==='place')return placeHere(c,r);
   if(G.phase!=='play')return;
-  if(G.mode==='idle'){const u=unitAt(c,r);if(u&&u.team===G.turnPlayer&&!u.played){selectUnit(u);autoEndIfStuck()}else toast(u&&u.played?'Ce personnage a déjà joué cette manche':`Choisis un personnage des ${TEAMS[G.turnPlayer]}`);return}
+  if(G.mode==='idle'){const u=unitAt(c,r);if(u&&u.owner===G.turnSeat&&!u.played){selectUnit(u);autoEndIfStuck()}else toast(u&&u.played?'Ce personnage a déjà joué cette manche':G.seats===4?`Choisis un de tes personnages (${seatName(G.turnSeat)})`:`Choisis un personnage des ${TEAMS[G.turnPlayer]}`);return}
   const u=G.sel,k=KEY(c,r),h=G.hl.get(k),t=unitAt(c,r);
   if(G.mode==='card'){useCard(G.cardIdx);return}
-  if(G.mode==='sel'){if(t&&t!==u&&t.team===u.team&&!t.played&&!G.committed){selectUnit(t);autoEndIfStuck()}else toast('Choisis une action (1-5)');return}
+  if(G.mode==='sel'){if(t&&t!==u&&t.owner===u.owner&&!t.played&&!G.committed){selectUnit(t);autoEndIfStuck()}else toast('Choisis une action (1-5)');return}
   if(G.mode==='move'){if(h==='move')return doMove({c,r})}
   else if(G.mode==='atk'){if(t&&h==='atk')return doAttack(t,G.solo.has(k))}
   else if(G.mode==='heal'){if(t&&h==='ally')return doHeal(t)}
@@ -1279,7 +1290,7 @@ async function confirmAct(){
       toast(`${G.multi.length}/${s.k} cibles · Entrée sur une cible déjà choisie pour lancer`);recalc();refresh();return}
     if(s.t==='cell'){if(h)return doAbility(isU,{c,r})}else if(t&&h)return doAbility(isU,t)}
   toast('Cible ou case invalide')}
-function nextUnit(){if(G.phase!=='play'||G.busy||locked())return;const list=alive(G.turnPlayer).filter(u=>!u.played);if(!list.length)return;
+function nextUnit(){if(G.phase!=='play'||G.busy||locked())return;const list=ownedLeft(G.turnSeat);if(!list.length)return;
   if(G.sel&&G.committed){toast('Termine d\'abord le tour de '+G.sel.d.name);return}
   const cur=list.findIndex(u=>u.c===G.cur.c&&u.r===G.cur.r),n=list[(cur+1)%list.length];G.cur={c:n.c,r:n.r};
   if(G.sel){selectUnit(n);autoEndIfStuck()}else refresh()}
@@ -1295,6 +1306,7 @@ addEventListener('keydown',e=>{
     else if(k==='1'||k==='2'||k==='3'||k==='4'){G.menuSel=+k-1;menuGo()}
     else if(k==='enter'||k===' ')menuGo();
     else if(k==='m'){setMobile(!G.mobile)}
+    else if(k==='h'){menuLocal()}
     else if(k==='f'){cycleDef()}
     else if(k==='p'){cycleBoard()}
     else if(k==='e'){toggleEvents()}
@@ -1362,7 +1374,7 @@ canvas.addEventListener('pointerup',ev=>{if(drag&&drag.b===2&&drag.moved<5)cance
 canvas.addEventListener('wheel',ev=>{ev.preventDefault();CAMT.zoom=Math.max(.45,Math.min(1.8,CAMT.zoom*Math.exp(ev.deltaY*.001)))},{passive:false});
 
 /* ============ EN LIGNE : salon protégé par mot de passe, parties synchronisées par journal d'actions ============ */
-const NET={ok:false,db:null,uid:null,uname:'Joueur',roomCap:null,code:null,team:0,doc:null,seq:0,queue:[],pumping:false,replaying:false,catchup:false,
+const NET={ok:false,db:null,uid:null,uname:'Joueur',roomCap:null,code:null,seat:0,mode:2,doc:null,seq:0,queue:[],pumping:false,replaying:false,catchup:false,
   unsub:[],listUnsub:null,list:[],peers:[],rh:null,started:false,confirmed:false,startSent:false,chk:{},desync:false,firstMoves:false,quitArm:0,tab:''};
 try{NET.tab=sessionStorage.getItem('ne_tab')||'';if(!NET.tab){NET.tab=Math.random().toString(36).slice(2,8);sessionStorage.setItem('ne_tab',NET.tab)}}catch(e){NET.tab=Math.random().toString(36).slice(2,8)}
 const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}},lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
@@ -1379,7 +1391,7 @@ const netErr=e=>{console.warn('net',e);toast('Erreur réseau : '+((e&&e.message)
 
 /* ---- journal d'actions ---- */
 function netLog(a){if(!G.online||NET.replaying||!NET.db)return;const n=++NET.seq;
-  NET.db.doc(`rooms/${NET.code}/moves/m${String(n).padStart(6,'0')}`).set({n,t:G.myTeam,a,ts:Date.now()}).catch(netErr)}
+  NET.db.doc(`rooms/${NET.code}/moves/m${String(n).padStart(6,'0')}`).set({n,t:G.mySeat,a,ts:Date.now()}).catch(netErr)}
 function serTarget(s,tg){switch(s.t){case'enemy':case'ally':return tg.id;case'cell':case'zone':return[tg.c,tg.r];case'line':return tg.dir;case'multi':return tg.map(x=>x.id)}return null}
 function deserTarget(u,s,p){switch(s.t){case'none':return targetsFor(u,s);case'enemy':case'ally':return byId(p);case'cell':return{c:p[0],r:p[1]};
   case'line':return{dir:p,cells:lineCellsDir(u,p,s.len,s.w),units:lineUnits(u,s,p)};
@@ -1399,7 +1411,7 @@ async function applyNet(a){NET.replaying=true;
   finally{NET.replaying=false}}
 async function netPump(){if(NET.pumping)return;NET.pumping=true;
   try{while(NET.queue.length){const m=NET.queue.shift();if(m.n<=NET.seq&&!NET.catchup)continue;NET.seq=Math.max(NET.seq,m.n);
-      if(!NET.catchup&&m.t===NET.team)continue;
+      if(!NET.catchup&&m.t===NET.seat)continue;
       while(G.busy)await wait(40);
       G.fast=NET.catchup;await applyNet(m.a);G.fast=false}
     if(NET.catchup&&NET.firstMoves){while(G.busy)await wait(40);NET.catchup=false;G.fast=false;refresh();recalc()}}
@@ -1407,25 +1419,29 @@ async function netPump(){if(NET.pumping)return;NET.pumping=true;
 function netMoves(snap){const add=[];for(const ch of snap.docChanges())if(ch.type==='added'){const m=ch.doc.data();if(m&&m.n>NET.seq)add.push(m)}
   add.sort((a,b)=>a.n-b.n);
   if(NET.catchup){for(const m of add)if(!NET.queue.some(q=>q.n===m.n))NET.queue.push(m)}
-  else for(const m of add)if(m.t!==NET.team&&!NET.queue.some(q=>q.n===m.n))NET.queue.push(m);
+  else for(const m of add)if(m.t!==NET.seat&&!NET.queue.some(q=>q.n===m.n))NET.queue.push(m);
   NET.firstMoves=true;netPump()}
-function stateHash(){const o=[G.round,G.turnPlayer,G.chain,G.ult,G.hand.map(h=>h.length),G.tokens.map(t=>[t.c,t.r]),G.units.map(u=>[u.id,u.c,u.r,u.hp,u.alive?1:0,u.effect?u.effect.type:0,u.buffs.length,u.timers.length])];
+function stateHash(){const o=[G.round,G.turnSeat,G.chain,G.ult,G.hand.map(h=>h.length),G.tokens.map(t=>[t.c,t.r]),G.units.map(u=>[u.id,u.c,u.r,u.hp,u.alive?1:0,u.effect?u.effect.type:0,u.buffs.length,u.timers.length])];
   const s=JSON.stringify(o);let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
-function netChk(){if(!G.online||G.fast||!NET.db||!NET.code)return;NET.db.doc(`rooms/${NET.code}/chk/r${G.round}t${NET.team}`).set({h:stateHash(),r:G.round}).catch(()=>{})}
-function netChkSnap(snap){for(const d of snap.docs){const x=d.data();if(!x)continue;(NET.chk[x.r]=NET.chk[x.r]||{})[d.id.endsWith('t0')?0:1]=x.h}
-  for(const r in NET.chk){const c=NET.chk[r];if(c[0]&&c[1]&&c[0]!==c[1]&&!NET.desync){NET.desync=true;console.warn('desync round',r);renderTop()}}}
+function netChk(){if(!G.online||G.fast||!NET.db||!NET.code)return;NET.db.doc(`rooms/${NET.code}/chk/r${G.round}s${NET.seat}`).set({h:stateHash(),r:G.round}).catch(()=>{})}
+function netChkSnap(snap){for(const d of snap.docs){const x=d.data();if(!x)continue;(NET.chk[x.r]=NET.chk[x.r]||{})[d.id.slice(d.id.indexOf('s')+1)]=x.h}
+  for(const r in NET.chk){const c=Object.values(NET.chk[r]);if(c.length>1&&c.some(v=>v!==c[0])&&!NET.desync){NET.desync=true;console.warn('desync round',r);renderTop()}}}
 
 /* ---- lobby ---- */
 const genCode=()=>{const a='ABCDEFGHJKMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<5;i++)s+=a[Math.floor(Math.random()*a.length)];return s};
-async function netHome(){G.phase='net';G.online=false;NET.view='home';const ov=$('#overlay');ov.className='on';
-  ov.innerHTML='<div class="ov"><h1>New <span>Era</span> · En ligne</h1><p>Connexion…</p></div>';refresh();
-  if(!await netInit()){ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> · En ligne</h1><p>Le mode en ligne demande d'ouvrir le jeu depuis claude.ai, connecté, avec un accès Contributeur à cet artifact (pour écrire dans le salon).</p><div class="ovbar"><button class="btn" id="netBack">Retour</button></div></div>`;$('#netBack').onclick=netBack;return}
+const boardOf=d=>(d.mode===4)?MEGA:(d.board??2);
+const seatList=d=>[...Array((d&&d.mode)||2).keys()];
+const pkOf=(d,i)=>(d['pk'+i]||[]).map(n=>CHARS.find(c=>c.num===n)).filter(Boolean);
+async function netHome(mode){if(mode)NET.mode=mode;mode=NET.mode;G.phase='net';G.online=false;NET.view='home';const ov=$('#overlay');ov.className='on';
+  const ttl=mode===4?'Quatre joueurs':'Deux joueurs';
+  ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> · ${ttl}</h1><p>Connexion…</p></div>`;refresh();
+  if(!await netInit()){ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> · ${ttl}</h1><p>Le mode hébergé demande d'ouvrir le jeu depuis claude.ai, connecté, avec un accès Contributeur à cet artifact (pour écrire dans le salon).</p><div class="ovbar"><button class="btn" id="netBack">Retour</button></div></div>`;$('#netBack').onclick=netBack;return}
   const last=(()=>{try{return JSON.parse(lsGet('ne_last')||'null')}catch(e){return null}})();
-  ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> · En ligne</h1>
-   <p>Deux joueurs, un salon avec mot de passe. Le créateur joue les Blancs, celui qui rejoint joue les Noirs. Le mot de passe est une barrière de courtoisie : ne l'utilise pas pour autre chose.</p>
+  ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> · ${ttl}</h1>
+   <p>${mode===4?'Un joueur héberge le salon, trois autres le rejoignent : 2 contre 2 sur une méga-arène 14×14 (surface doublée). Le créateur est le Joueur 1 (Blancs), puis les arrivants prennent les places libres : Noirs, Blancs, Noirs. Chacun contrôle 4 personnages.':'Un joueur héberge le salon, l\'autre le rejoint. Le créateur joue les Blancs, celui qui rejoint joue les Noirs.'} Le mot de passe est une barrière de courtoisie : ne l'utilise pas pour autre chose.</p>
    <div class="netgrid">
     <div class="netbox"><h3>Ton pseudo</h3><input id="netName" maxlength="20" value="${esc(NET.uname)}" autocomplete="off"></div>
-    <div class="netbox"><h3>Créer un salon</h3><input id="netRoom" placeholder="Nom du salon" maxlength="24" autocomplete="off"><input id="netPass" type="password" placeholder="Mot de passe (facultatif)" maxlength="40" autocomplete="off"><button class="btn" id="netCreate">Créer le salon</button></div>
+    <div class="netbox"><h3>Héberger un salon</h3><input id="netRoom" placeholder="Nom du salon" maxlength="24" autocomplete="off"><input id="netPass" type="password" placeholder="Mot de passe (facultatif)" maxlength="40" autocomplete="off"><button class="btn" id="netCreate">Créer le salon</button></div>
     <div class="netbox"><h3>Rejoindre un salon</h3><input id="netJoinPass" type="password" placeholder="Mot de passe du salon" maxlength="40" autocomplete="off"><div id="netList" class="netlist"></div></div>
    </div>
    <div class="ovbar"><button class="btn" id="netBack"><kbd>Échap</kbd> Retour</button>${last?`<button class="btn on" id="netResume">Reprendre ma partie (${esc(last.code)})</button>`:''}</div></div>`;
@@ -1434,91 +1450,92 @@ async function netHome(){G.phase='net';G.online=false;NET.view='home';const ov=$
   if(NET.listUnsub)NET.listUnsub();
   NET.listUnsub=NET.db.collection('rooms').orderBy('upd','desc').limit(30).onSnapshot(snap=>{NET.list=snap.docs.map(d=>({id:d.id,...d.data()}));renderNetList()},e=>toast('Liste des salons indisponible'))}
 function renderNetList(){const el=$('#netList');if(!el)return;const now=Date.now();
-  const rows=NET.list.filter(r=>r.status!=='over'&&now-(r.upd||0)<12*3600*1000);
-  el.innerHTML=rows.length?rows.map(r=>`<div class="nrow"><span class="nlock">${r.hash?'🔒':'🔓'}</span><span class="nn"><b>${esc(r.name)}</b><small>${esc(r.hostName)} · ${r.status==='play'?'en cours':r.guestId?'complet':'en attente'}</small></span><button class="btn" data-c="${esc(r.id)}" ${r.guestId&&r.status!=='lobby'?'':''}>Rejoindre</button></div>`).join(''):'<div class="nrow"><small>Aucun salon ouvert. Crée le tien !</small></div>';
+  const rows=NET.list.filter(r=>r.status!=='over'&&now-(r.upd||0)<12*3600*1000&&(r.mode||2)===NET.mode);
+  el.innerHTML=rows.length?rows.map(r=>`<div class="nrow"><span class="nlock">${r.hash?'🔒':'🔓'}</span><span class="nn"><b>${esc(r.name)}</b><small>${esc(r.nm0||r.hostName)} · ${r.status==='play'?'en cours':(r.n||1)>=(r.mode||2)?'complet':'en attente '+(r.n||1)+'/'+(r.mode||2)}</small></span><button class="btn" data-c="${esc(r.id)}">Rejoindre</button></div>`).join(''):'<div class="nrow"><small>Aucun salon ouvert. Héberge le tien !</small></div>';
   el.querySelectorAll('button[data-c]').forEach(b=>b.onclick=()=>netJoin(b.dataset.c))}
 function netBack(){if(NET.listUnsub){NET.listUnsub();NET.listUnsub=null}$('#overlay').className='';startMenu()}
 async function netCreate(){const name=$('#netRoom').value.trim(),pass=$('#netPass').value;NET.uname=$('#netName').value.trim()||'Joueur';lsSet('ne_name',NET.uname);
   if(!name){toast('Donne un nom au salon');return}
-  const salt=Math.random().toString(36).slice(2,10),hash=pass?await sha(salt+':'+pass):'',code=genCode();
-  try{await NET.db.doc('rooms/'+code).set({name,salt,hash,hostId:NET.uid,hostName:NET.uname,guestId:'',guestName:'',status:'lobby',variant:G.variant,budget:G.budget,defDie:G.defDie,board:G.board,events:G.events,seed:0,picks:{},created:Date.now(),upd:Date.now()})}catch(e){return netErr(e)}
-  NET.code=code;NET.team=0;await enterSalon()}
+  const salt=Math.random().toString(36).slice(2,10),hash=pass?await sha(salt+':'+pass):'',code=genCode(),M=NET.mode;
+  const doc={name,salt,hash,mode:M,n:1,status:'lobby',variant:G.variant,budget:G.budget,defDie:G.defDie,board:M===4?MEGA:G.board,events:G.events,seed:0,created:Date.now(),upd:Date.now()};
+  for(let i=0;i<4;i++){doc['id'+i]=i===0?NET.uid:'';doc['nm'+i]=i===0?NET.uname:'';doc['pk'+i]=null}
+  try{await NET.db.doc('rooms/'+code).set(doc)}catch(e){return netErr(e)}
+  NET.code=code;NET.seat=0;await enterSalon()}
 async function netJoin(code){const pass=($('#netJoinPass')||{}).value||'';NET.uname=($('#netName')||{}).value.trim()||NET.uname;lsSet('ne_name',NET.uname);
   try{const ref=NET.db.doc('rooms/'+code),snap=await ref.get();if(!snap.exists){toast('Salon introuvable');return}let d=snap.data();
     if(d.hash&&await sha(d.salt+':'+pass)!==d.hash){toast('Mot de passe incorrect');return}
-    let team;
-    if(d.hostId===NET.uid)team=0;else if(d.guestId===NET.uid)team=1;
-    else{if(d.guestId){toast('Salon complet');return}
+    const find=x=>seatList(x).find(i=>x['id'+i]===NET.uid);
+    let seat=find(d);
+    if(seat==null){if(seatList(d).every(i=>d['id'+i])){toast('Salon complet');return}
       const l=await ref.acquire({holder:NET.uid,ttlMs:4000});if(!l.acquired){toast('Réessaie dans un instant');return}
-      d=(await ref.get()).data();if(d.guestId&&d.guestId!==NET.uid){toast('Salon complet');return}
-      await ref.update({guestId:NET.uid,guestName:NET.uname,upd:Date.now()});team=1}
-    NET.code=code;NET.team=team;await enterSalon()}catch(e){netErr(e)}}
+      d=(await ref.get()).data();seat=find(d);
+      if(seat==null){seat=seatList(d).find(i=>!d['id'+i]);if(seat==null){toast('Salon complet');return}
+        await ref.update({['id'+seat]:NET.uid,['nm'+seat]:NET.uname,n:seatList(d).filter(i=>d['id'+i]).length+1,upd:Date.now()})}}
+    NET.mode=d.mode||2;NET.code=code;NET.seat=seat;await enterSalon()}catch(e){netErr(e)}}
 async function netResume(last){try{const snap=await NET.db.doc('rooms/'+last.code).get();if(!snap.exists||snap.data().status==='over'){lsSet('ne_last','');toast('Cette partie n\'existe plus');return netHome()}
-    NET.uid=last.uid;NET.code=last.code;NET.team=last.team;await enterSalon()}catch(e){netErr(e)}}
+    NET.uid=last.uid;NET.code=last.code;NET.seat=last.seat||0;NET.mode=snap.data().mode||2;await enterSalon()}catch(e){netErr(e)}}
 async function enterSalon(){if(NET.listUnsub){NET.listUnsub();NET.listUnsub=null}
-  lsSet('ne_last',JSON.stringify({code:NET.code,team:NET.team,uid:NET.uid}));
-  NET.started=false;NET.startSent=false;NET.confirmed=false;NET.desync=false;NET.chk={};NET.seq=0;NET.queue=[];NET.doc=null;G.online=true;G.myTeam=NET.team;G.phase='net';NET.view='salon';
+  lsSet('ne_last',JSON.stringify({code:NET.code,seat:NET.seat,uid:NET.uid}));
+  NET.started=false;NET.startSent=false;NET.confirmed=false;NET.desync=false;NET.chk={};NET.seq=0;NET.queue=[];NET.doc=null;G.online=true;G.seats=NET.mode;G.mySeat=NET.seat;G.phase='net';NET.view='salon';
   NET.unsub.push(NET.db.doc('rooms/'+NET.code).onSnapshot(netDoc,e=>netErr(e)));
   NET.unsub.push(NET.db.collection(`rooms/${NET.code}/chk`).onSnapshot(netChkSnap,()=>{}));
-  if(NET.roomCap){try{NET.rh=await NET.roomCap.join('ne-'+NET.code.toLowerCase());NET.rh.presence({uid:NET.uid,name:NET.uname,team:NET.team});
+  if(NET.roomCap){try{NET.rh=await NET.roomCap.join('ne-'+NET.code.toLowerCase());NET.rh.presence({uid:NET.uid,name:NET.uname,seat:NET.seat});
     NET.unsub.push(NET.rh.onPeers(ch=>{NET.peers=ch.peers;if(G.phase==='net')renderSalon();else renderTop()}))}catch(e){NET.rh=null}}
   renderSalon()}
 const peerOn=uid=>uid&&NET.peers.some(p=>p.presence&&p.presence.uid===uid);
 function renderSalon(){if(G.phase!=='net'||NET.view!=='salon')return;const d=NET.doc,ov=$('#overlay');ov.className='on';
   if(!d){ov.innerHTML='<div class="ov"><h1>Salon</h1><p>Chargement…</p></div>';return}
-  const locked=!!(d.picks&&(d.picks.h||d.picks.g)),hostOn=NET.team===0||(NET.roomCap?peerOn(d.hostId):true),guestOn=NET.team===1||(NET.roomCap?peerOn(d.guestId):true);
+  const M=d.mode||2,L=seatList(d),locked=L.some(i=>d['pk'+i]),full=L.every(i=>d['id'+i]),on=i=>i===NET.seat||(NET.roomCap?peerOn(d['id'+i]):true);
   ov.innerHTML=`<div class="ov"><h1>Salon <span>${esc(d.name)}</span> <small class="code">#${esc(NET.code)}</small></h1>
-   <p>${d.hash?'🔒 Protégé par mot de passe. ':''}Partage le nom du salon${d.hash?' et le mot de passe':''} avec ton adversaire. Les deux joueurs sont co-hôtes : chacun peut modifier les réglages tant qu'aucune équipe n'est validée.</p>
-   <div class="netgrid"><div class="netbox"><h3>⚪ Blancs</h3><div class="pl">${esc(d.hostName)} <span class="dotp ${hostOn?'on':''}"></span> ${NET.team===0?'<small>(toi)</small>':''}</div></div>
-   <div class="netbox"><h3>⚫ Noirs</h3><div class="pl">${d.guestId?esc(d.guestName)+` <span class="dotp ${guestOn?'on':''}"></span> ${NET.team===1?'<small>(toi)</small>':''}`:'<small>En attente d\'un adversaire…</small>'}</div></div>
+   <p>${d.hash?'🔒 Protégé par mot de passe. ':''}Partage le nom du salon${d.hash?' et le mot de passe':''} avec ${M===4?'tes 3 coéquipiers et adversaires':'ton adversaire'}. Tous les joueurs sont co-hôtes : chacun peut modifier les réglages tant qu'aucune équipe n'est validée.${M===4?' <b>Équipes : Joueurs 1 + 3 (Blancs) contre Joueurs 2 + 4 (Noirs).</b>':''}</p>
+   <div class="netgrid">${L.map(i=>`<div class="netbox"><h3>${i%2?'⚫ Noirs':'⚪ Blancs'} · Joueur ${i+1}${i===0?' (hôte)':''}</h3><div class="pl">${d['id'+i]?esc(d['nm'+i])+` <span class="dotp ${on(i)?'on':''}"></span> ${i===NET.seat?'<small>(toi)</small>':''}`:'<small>En attente d\'un joueur…</small>'}</div></div>`).join('')}
    <div class="netbox"><h3>Réglages</h3><button class="btn" id="sVar" ${locked?'disabled':''}>Variante avancée : <b>${d.variant?'ACTIVE':'désactivée'}</b></button>
-    <button class="btn" id="sBoard" ${locked?'disabled':''}>Plateau : <b>${(BOARDS[d.board]||BOARDS[2]).n}</b></button>
+    ${M===4?`<button class="btn" disabled>Plateau : <b>${BOARDS[MEGA].n}</b></button>`:`<button class="btn" id="sBoard" ${locked?'disabled':''}>Plateau : <b>${(BOARDS[d.board]||BOARDS[2]).n}</b></button>`}
     <button class="btn" id="sEvt" ${locked?'disabled':''}>Événements : <b>${d.events===false?'désactivés':'ACTIVÉS'}</b></button>
     <button class="btn" id="sDef" ${locked?'disabled':''}>Dé de défense : <b>d${d.defDie||5}</b></button>
     <button class="btn" id="sBud" ${locked?'disabled':''}>Équilibrage : <b>${(BUDGETS.find(b=>b[0]===d.budget)||BUDGETS[2])[1]}</b></button></div></div>
-   <div class="ovbar"><button class="btn on" id="sGo" ${d.guestId?'':'disabled'}>Composer mon équipe</button><button class="btn" id="sQuit">Quitter le salon</button></div></div>`;
+   <div class="ovbar"><button class="btn on" id="sGo" ${full?'':'disabled'}>Composer mes personnages</button><button class="btn" id="sQuit">Quitter le salon</button></div></div>`;
   $('#sGo').onclick=netCompose;$('#sQuit').onclick=()=>netLeave(true);
   $('#sVar').onclick=()=>NET.db.doc('rooms/'+NET.code).update({variant:!d.variant,upd:Date.now()}).catch(netErr);
-  $('#sBoard').onclick=()=>NET.db.doc('rooms/'+NET.code).update({board:((d.board??2)+1)%BOARDS.length,upd:Date.now()}).catch(netErr);
+  if($('#sBoard'))$('#sBoard').onclick=()=>NET.db.doc('rooms/'+NET.code).update({board:((d.board??2)+1)%NB,upd:Date.now()}).catch(netErr);
   $('#sEvt').onclick=()=>NET.db.doc('rooms/'+NET.code).update({events:d.events===false,upd:Date.now()}).catch(netErr);
   $('#sDef').onclick=()=>NET.db.doc('rooms/'+NET.code).update({defDie:DEFS[(DEFS.indexOf(d.defDie||5)+1)%3],upd:Date.now()}).catch(netErr);
   $('#sBud').onclick=()=>{const i=BUDGETS.findIndex(b=>b[0]===d.budget);NET.db.doc('rooms/'+NET.code).update({budget:BUDGETS[(i+1)%BUDGETS.length][0],upd:Date.now()}).catch(netErr)}}
 function netDoc(snap){
   if(!snap.exists){if(!NET.started){toast('Le salon a été fermé');netLeave(true)}return}
-  const d=NET.doc=snap.data();
+  const d=NET.doc=snap.data(),L=seatList(d),me=NET.seat;
   if(G.phase==='net')renderSalon();
-  if(G.phase==='pick'&&G.online){const opp=NET.team===0?d.picks&&d.picks.g:d.picks&&d.picks.h,mine=NET.team===0?d.picks&&d.picks.h:d.picks&&d.picks.g,o=1-NET.team;
-    if(NET.confirmed&&!(mine&&mine.length)){NET.confirmed=false;G.picks[NET.team]=[];toast('Choix en conflit : recompose ton équipe')}
-    const mapped=(opp||[]).map(n=>CHARS.find(c=>c.num===n)).filter(Boolean);
-    if(G.picks[o].map(c=>c.num).join()!==mapped.map(c=>c.num).join()){G.picks[o]=mapped;G.picks[NET.team]=G.picks[NET.team].filter(c=>!mapped.includes(c))}
-    G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;G.board=d.board??2;G.events=d.events!==false;if(NET.confirmed)showWait();else showPick()}
-  if(d.status==='lobby'&&d.picks&&d.picks.h&&d.picks.g&&NET.team===0&&!NET.startSent){
-    if(d.picks.h.length===4&&d.picks.g.length===4){
-      if(d.picks.h.some(n=>d.picks.g.includes(n))){NET.db.doc('rooms/'+NET.code).update({picks:{h:null,g:null},upd:Date.now()}).catch(netErr)}
-      else{NET.startSent=true;NET.db.doc('rooms/'+NET.code).update({status:'play',seed:1+Math.floor(Math.random()*2147483000),upd:Date.now()}).catch(netErr)}}}
+  if(G.phase==='pick'&&G.online){
+    if(NET.confirmed&&!(d['pk'+me]&&d['pk'+me].length)){NET.confirmed=false;G.picks[me]=[];toast('Choix en conflit : recompose ton équipe')}
+    for(const o of L){if(o===me)continue;const mp=pkOf(d,o);if(G.picks[o].map(c=>c.num).join()!==mp.map(c=>c.num).join()){G.picks[o]=mp;G.picks[me]=G.picks[me].filter(c=>!mp.includes(c))}}
+    G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;G.board=boardOf(d);G.events=d.events!==false;if(NET.confirmed)showWait();else showPick()}
+  if(d.status==='lobby'&&me===0&&!NET.startSent&&L.every(i=>d['pk'+i]&&d['pk'+i].length===4)){
+    const all=[].concat(...L.map(i=>d['pk'+i]));
+    if(new Set(all).size!==all.length){const z={upd:Date.now()};for(let i=0;i<4;i++)z['pk'+i]=null;NET.db.doc('rooms/'+NET.code).update(z).catch(netErr)}
+    else{NET.startSent=true;NET.db.doc('rooms/'+NET.code).update({status:'play',seed:1+Math.floor(Math.random()*2147483000),upd:Date.now()}).catch(netErr)}}
   if(d.status==='play'&&!NET.started&&d.seed)startNetGame()}
-function netCompose(){const d=NET.doc;if(!d||!d.guestId)return;G.online=true;G.myTeam=NET.team;G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;G.board=d.board??2;G.events=d.events!==false;G.phase='pick';G.pickTeam=NET.team;G.ptab='A';G.pidx=0;NET.confirmed=false;
-  G.picks=[[],[]];const o=1-NET.team,opp=NET.team===0?d.picks&&d.picks.g:d.picks&&d.picks.h;G.picks[o]=(opp||[]).map(n=>CHARS.find(c=>c.num===n)).filter(Boolean);showPick();refresh()}
-function showWait(){const ov=$('#overlay');ov.className='on';ov.innerHTML=`<div class="ov"><h1>Équipe <span>validée</span></h1><p>En attente de l'adversaire… La partie démarre dès que les deux équipes sont prêtes.</p><div class="ovbar"><button class="btn" id="wEdit">Modifier mon équipe</button><button class="btn" id="wQuit">Quitter le salon</button></div></div>`;
-  $('#wEdit').onclick=async()=>{NET.confirmed=false;try{await NET.db.doc('rooms/'+NET.code).update({picks:{[NET.team===0?'h':'g']:null},upd:Date.now()})}catch(e){netErr(e)}showPick()};$('#wQuit').onclick=()=>netLeave(true)}
-async function netConfirmPicks(){const t=NET.team,nums=G.picks[t].map(d=>d.num);
-  try{const d=(await NET.db.doc('rooms/'+NET.code).get()).data(),opp=t===0?d.picks&&d.picks.g:d.picks&&d.picks.h;
-    if(opp&&opp.some(n=>nums.includes(n))){toast('Un de tes personnages vient d\'être pris');G.picks[t]=G.picks[t].filter(c=>!opp.includes(c.num));G.picks[1-t]=opp.map(n=>CHARS.find(c=>c.num===n));showPick();return}
-    NET.confirmed=true;await NET.db.doc('rooms/'+NET.code).update({picks:{[t===0?'h':'g']:nums},upd:Date.now()});showWait()}catch(e){NET.confirmed=false;netErr(e)}}
+function netCompose(){const d=NET.doc;if(!d||!seatList(d).every(i=>d['id'+i]))return;G.online=true;G.seats=d.mode||2;G.mySeat=NET.seat;G.names=[0,1,2,3].map(i=>d['nm'+i]||'');G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;G.board=boardOf(d);G.events=d.events!==false;G.phase='pick';G.pickTeam=NET.seat;G.ptab='A';G.pidx=0;NET.confirmed=false;
+  G.picks=[[],[],[],[]];for(const o of seatList(d))if(o!==NET.seat)G.picks[o]=pkOf(d,o);showPick();refresh()}
+function showWait(){const ov=$('#overlay');ov.className='on';ov.innerHTML=`<div class="ov"><h1>Équipe <span>validée</span></h1><p>En attente ${G.seats===4?'des autres joueurs':'de l\'adversaire'}… La partie démarre dès que tous les joueurs sont prêts.</p><div class="ovbar"><button class="btn" id="wEdit">Modifier mes personnages</button><button class="btn" id="wQuit">Quitter le salon</button></div></div>`;
+  $('#wEdit').onclick=async()=>{NET.confirmed=false;try{await NET.db.doc('rooms/'+NET.code).update({['pk'+NET.seat]:null})}catch(e){netErr(e)}showPick()};$('#wQuit').onclick=()=>netLeave(true)}
+async function netConfirmPicks(){const t=NET.seat,nums=G.picks[t].map(d=>d.num);
+  try{const d=(await NET.db.doc('rooms/'+NET.code).get()).data(),L=seatList(d),taken=[].concat(...L.filter(i=>i!==t).map(i=>d['pk'+i]||[]));
+    if(nums.some(n=>taken.includes(n))){toast('Un de tes personnages vient d\'être pris');for(const o of L)if(o!==t)G.picks[o]=pkOf(d,o);G.picks[t]=G.picks[t].filter(c=>!taken.includes(c.num));showPick();return}
+    NET.confirmed=true;await NET.db.doc('rooms/'+NET.code).update({['pk'+t]:nums,upd:Date.now()});showWait()}catch(e){NET.confirmed=false;netErr(e)}}
 async function startNetGame(){if(NET.started)return;NET.started=true;const d=NET.doc;
-  seedRng(d.seed);G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;G.board=d.board??2;G.events=d.events!==false;resetGame();G.nid=1;G.online=true;G.bot=false;G.myTeam=NET.team;
-  G.picks=[d.picks.h.map(n=>CHARS.find(c=>c.num===n)),d.picks.g.map(n=>CHARS.find(c=>c.num===n))];
-  $('#overlay').className='';CAMHOME.yaw=NET.team?Math.PI:0;Object.assign(CAMT,CAMHOME);Object.assign(CAMC,CAMHOME);
+  seedRng(d.seed);G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;G.board=boardOf(d);G.events=d.events!==false;resetGame();G.nid=1;G.online=true;G.bot=false;G.seats=d.mode||2;G.mySeat=NET.seat;G.names=[0,1,2,3].map(i=>d['nm'+i]||'');
+  G.picks=[0,1,2,3].map(i=>pkOf(d,i));
+  $('#overlay').className='';CAMHOME.yaw=NET.seat%2?Math.PI:0;Object.assign(CAMT,CAMHOME);Object.assign(CAMC,CAMHOME);
   NET.seq=0;NET.queue=[];NET.catchup=true;NET.firstMoves=false;G.fast=true;startPlacement();
   NET.unsub.push(NET.db.collection(`rooms/${NET.code}/moves`).orderBy('n').onSnapshot(netMoves,e=>netErr(e)));
   setTimeout(()=>{if(NET.catchup&&!NET.firstMoves){NET.firstMoves=true;netPump()}},4000);refresh()}
-function netOver(){if(G.online&&NET.team===0&&NET.db)NET.db.doc('rooms/'+NET.code).update({status:'over',upd:Date.now()}).catch(()=>{});lsSet('ne_last','')}
+function netOver(){if(G.online&&NET.seat===0&&NET.db)NET.db.doc('rooms/'+NET.code).update({status:'over',upd:Date.now()}).catch(()=>{});lsSet('ne_last','')}
 async function netLeave(toMenu){for(const u of NET.unsub.splice(0))try{u()}catch(e){}
   if(NET.listUnsub){NET.listUnsub();NET.listUnsub=null}
   if(NET.rh){try{await NET.rh.leave()}catch(e){}NET.rh=null}
-  if(NET.db&&NET.code&&NET.team===0&&!NET.started){try{await NET.db.doc('rooms/'+NET.code).delete()}catch(e){}}
+  if(NET.db&&NET.code&&NET.seat===0&&!NET.started){try{await NET.db.doc('rooms/'+NET.code).delete()}catch(e){}}
   if(!NET.started||G.phase==='over')lsSet('ne_last','');
-  NET.code=null;NET.doc=null;NET.started=false;NET.queue=[];NET.catchup=false;NET.peers=[];G.online=false;G.fast=false;
+  NET.code=null;NET.doc=null;NET.started=false;NET.queue=[];NET.catchup=false;NET.peers=[];G.online=false;G.fast=false;G.seats=2;
   CAMHOME.yaw=0;Object.assign(CAMT,CAMHOME);if(toMenu){$('#overlay').className='';startMenu()}}
 
 
@@ -1538,7 +1555,7 @@ const TUTO=[
  {t:'<b>Renforts.</b> Le jeton doré donne un <b>renfort</b> : un personnage de ta réserve. Avec <kbd>5</kbd>, ton pion lance sa capacité (avec TES stats), ou subit son passif pour un tour. Termine le tour de Zeus (<kbd>E</kbd>), puis déplace Apollo sur la case dorée.',ok:f=>f.token,focus:()=>({c:3,r:9})},
  {t:'<b>À toi de finir !</b> Élimine les deux pions noirs. Lignes, zones, bombes, combos… tout est détaillé dans les fiches. Bonne chance !',ok:()=>G.phase==='over'}
 ];
-function startTuto(){G.online=false;G.fast=false;resetGame();seedRng(4242);G.bot=true;G.variant=true;G.budget=99;G.defDie=5;G.board=2;G.events=false;applyBoard(2);G.tuto={i:0,f:{sel:{}},done:false};
+function startTuto(){G.seats=2;G.online=false;G.fast=false;resetGame();seedRng(4242);G.bot=true;G.variant=true;G.budget=99;G.defDie=5;G.board=2;G.events=false;applyBoard(2);G.tuto={i:0,f:{sel:{}},done:false};
   G.phase='play';$('#overlay').className='';CAMHOME.yaw=0;Object.assign(CAMT,CAMHOME);$('#keys').classList.add('min');
   const sp=(n,t,c,r)=>dropIn(spawnUnit(CHARS.find(x=>x.num===n),t,c,r));
   sp(1,0,4,7);sp(8,0,3,7);sp(25,1,4,2);sp(15,1,7,1);
@@ -1586,7 +1603,7 @@ function renderCamCtl(){const el=$('#camctl');if(!el)return;el.innerHTML=G.mobil
     if(k==='l')CAMT.yaw-=Math.PI/4;else if(k==='r')CAMT.yaw+=Math.PI/4;else if(k==='p')CAMT.zoom=Math.max(.45,CAMT.zoom/1.2);else if(k==='m')CAMT.zoom=Math.min(1.8,CAMT.zoom*1.2);
     else if(k==='v')CAMT.pitch=CAMT.pitch>1.3?CAMHOME.pitch:1.5;else if(k==='0')Object.assign(CAMT,CAMHOME);else if(k==='fx')$('#fxref').classList.toggle('open');else if(k==='fo')setFollow(!G.camFollow);else if(k==='pc')setMobile(false)})}
 const mobHint=()=>{const m=G.mode,u=G.sel;
-  if(G.online&&G.turnPlayer!==G.myTeam)return'Tour de l\'adversaire…';if(G.bot&&G.turnPlayer===1)return'Le bot réfléchit…';
+  if(G.online&&G.turnSeat!==G.mySeat)return G.seats===4?'Tour de '+seatName(G.turnSeat)+'…':'Tour de l\'adversaire…';if(G.bot&&G.turnPlayer===1)return'Le bot réfléchit…';
   if(m==='idle')return'Touche un pion à l\'anneau vert (ou ⏭ Suivant)';
   if(m==='frozen')return`${u.d.name} est gelé 🧊 : brise la glace (−1 PV) ou passe`;
   if(m==='sel')return`Actions restantes : ${G.actions} · choisis une action ci-dessous`;
@@ -1644,7 +1661,7 @@ function frame(now){const raw=Math.min(.05,(now-last)/1000);last=now;const t=now
       const sw=Math.sin(t*16)*.8*u.walkA,idle=Math.sin(t*1.7+u.id)*.03;
       P.ll.rotation.x=B0.ll+sw;P.rl.rotation.x=B0.rl-sw;P.la.rotation.x=B0.la-sw*.5+idle;P.ra.rotation.x=B0.ra+sw*.5-1.5*u.atkA+idle;P.head.rotation.y=B0.hy+Math.sin(t*.9+u.id)*.08}}
     let da=u.faceY-u.mesh.rotation.y;da=Math.atan2(Math.sin(da),Math.cos(da));u.mesh.rotation.y+=da*(1-Math.exp(-raw*14));
-    const rdy=G.phase==='play'&&u.team===G.turnPlayer&&!u.played&&!sel&&ctl(u.team);
+    const rdy=G.phase==='play'&&u.owner===G.turnSeat&&!u.played&&!sel&&ctlS(u.owner);
     const tm=G.pv.mark.get(u.id)||(G.tmark&&G.tmark.get(u.id)),tr=u.mesh.userData.tgt;if(tm)tr.material.color.setHex(TMC[tm]);
     tr.material.opacity+=(((tm?(tm==='hint'?.5:.95)*(.75+.25*Math.sin(t*7)):0))-tr.material.opacity)*(1-Math.exp(-raw*14));tr.rotation.y=t*1.4;tr.scale.setScalar(tm&&tm!=='hint'?1+Math.sin(t*7)*.07:1);
     const rm=u.mesh.userData.ready;rm.material.opacity+=((rdy?.55+.35*Math.sin(t*5):0)-rm.material.opacity)*(1-Math.exp(-raw*12));rm.scale.setScalar(1+(rdy?Math.sin(t*5)*.06:0));
