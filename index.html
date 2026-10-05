@@ -1384,7 +1384,7 @@ async function sha(t){try{const b=await crypto.subtle.digest('SHA-256',new TextE
 const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* ---- transport direct (WebRTC via PeerJS) : mini-base répliquée, le créateur du salon fait autorité ---- */
 const ICE={config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'},{urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}]}};
-const netStat=(m,bad)=>{const e=$('#netStat');if(e){e.textContent=m;e.style.color=bad?'#ff8b8b':'#9fb0d0'}};
+const netStat=(m,bad)=>{document.querySelectorAll('.nstat').forEach(e=>{e.textContent=m;e.style.color=bad?'#ff8b8b':'#9fb0d0'})};
 const P2P={peer:null,host:false,code:null,conns:[],hc:null,store:new Map(),ls:[],pend:new Map(),pid:0,leases:new Map(),peerCb:null,uids:[],saveT:0,ready:false};
 const jc=x=>x==null?x:JSON.parse(JSON.stringify(x));
 function loadPeerJS(){return new Promise((ok,ko)=>{if(window.Peer)return ok();const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js';
@@ -1419,7 +1419,8 @@ P2P.roomCap={join:async()=>({presence(){},onPeers(cb){P2P.peerCb=cb;setTimeout((
 P2P.hostRoom=function(code,restore){return new Promise((ok,ko)=>{P2P.close();P2P.host=true;P2P.code=code;
   if(restore){try{P2P.store=new Map(JSON.parse(lsGet('ne_p2p_'+code)||'[]'))}catch(e){}}
   let tries=0;const start=()=>{const pe=P2P.peer=new Peer('neera-'+code.toLowerCase(),ICE);
-    pe.on('open',()=>{P2P.ready=true;ok()});
+    const tm=setTimeout(()=>{if(!P2P.ready)ko(new Error('Serveur PeerJS injoignable (réseau ou blocage du site)'))},12000);
+    pe.on('open',()=>{clearTimeout(tm);P2P.ready=true;ok()});
     pe.on('error',e=>{if(e.type==='unavailable-id'&&restore&&tries++<6){try{pe.destroy()}catch(x){}setTimeout(start,2500);return}ko(new Error(e.type==='unavailable-id'?'Ce code est déjà utilisé':(e.type||e.message)));});
     pe.on('connection',c=>{if(P2P.conns.filter(x=>x.open).length>=3){setTimeout(()=>c.close(),300);return}
       c.on('open',()=>{c.open=true;P2P.conns.push(c)});
@@ -1518,8 +1519,8 @@ async function netHome(mode){if(mode)NET.mode=mode;mode=NET.mode;G.phase='net';G
    <p>${mode===4?'Un joueur héberge le salon, trois autres le rejoignent : 2 contre 2 sur une méga-arène 14×14 (surface doublée). Le créateur est le Joueur 1 (Blancs), puis les arrivants prennent les places libres : Noirs, Blancs, Noirs. Chacun contrôle 4 personnages.':'Un joueur héberge le salon, l\'autre le rejoint. Le créateur joue les Blancs, celui qui rejoint joue les Noirs.'} Le mot de passe est une barrière de courtoisie : ne l'utilise pas pour autre chose.</p>
    <div class="netgrid">
     <div class="netbox"><h3>Ton pseudo</h3><input id="netName" maxlength="20" value="${esc(NET.uname)}" autocomplete="off"></div>
-    <div class="netbox"><h3>Héberger un salon</h3><input id="netRoom" placeholder="Nom du salon" maxlength="24" autocomplete="off"><input id="netPass" type="password" placeholder="Mot de passe (facultatif)" maxlength="40" autocomplete="off"><button class="btn" id="netCreate">Créer le salon</button></div>
-    <div class="netbox"><h3>Rejoindre un salon</h3>${p2?'<input id="netCode" placeholder="Code du salon (5 lettres)" maxlength="5" autocomplete="off" style="text-transform:uppercase">':''}<input id="netJoinPass" type="password" placeholder="Mot de passe du salon" maxlength="40" autocomplete="off">${p2?'<button class="btn" id="netJoinBtn">Rejoindre par code</button>':''}<div id="netList" class="netlist"></div><small id="netStat" style="min-height:1.2em"></small></div>
+    <div class="netbox"><h3>Héberger un salon</h3><input id="netRoom" placeholder="Nom du salon" maxlength="24" autocomplete="off"><input id="netPass" type="password" placeholder="Mot de passe (facultatif)" maxlength="40" autocomplete="off"><button class="btn" id="netCreate">Créer le salon</button><small class="nstat" style="min-height:1.2em"></small></div>
+    <div class="netbox"><h3>Rejoindre un salon</h3>${p2?'<input id="netCode" placeholder="Code du salon (5 lettres)" maxlength="5" autocomplete="off" style="text-transform:uppercase">':''}<input id="netJoinPass" type="password" placeholder="Mot de passe du salon" maxlength="40" autocomplete="off">${p2?'<button class="btn" id="netJoinBtn">Rejoindre par code</button>':''}<div id="netList" class="netlist"></div><small class="nstat" style="min-height:1.2em"></small></div>
    </div>
    <div class="ovbar"><button class="btn" id="netBack"><kbd>Échap</kbd> Retour</button>${canBoth?`<button class="btn" id="netBe">Connexion : <b>${p2?'directe (code)':'salons Claude'}</b></button>`:''}${last?`<button class="btn on" id="netResume">Reprendre ma partie (${esc(last.code)})</button>`:''}</div></div>`;
   $('#netBack').onclick=netBack;$('#netCreate').onclick=netCreate;if(last)$('#netResume').onclick=()=>netResume(last);
@@ -1538,7 +1539,7 @@ async function netCreate(){const name=$('#netRoom').value.trim(),pass=$('#netPas
   const salt=Math.random().toString(36).slice(2,10),hash=pass?await sha(salt+':'+pass):'',code=genCode(),M=NET.mode;
   const doc={name,salt,hash,mode:M,n:1,status:'lobby',variant:G.variant,budget:G.budget,defDie:G.defDie,board:M===4?MEGA:G.board,events:G.events,seed:0,created:Date.now(),upd:Date.now()};
   for(let i=0;i<4;i++){doc['id'+i]=i===0?NET.uid:'';doc['nm'+i]=i===0?NET.uname:'';doc['pk'+i]=null}
-  try{if(NET.be==='p2p')await P2P.hostRoom(code);await NET.db.doc('rooms/'+code).set(doc)}catch(e){return netErr(e)}
+  try{if(NET.be==='p2p'){netStat('Création du salon (connexion à PeerJS)…');await P2P.hostRoom(code)}await NET.db.doc('rooms/'+code).set(doc)}catch(e){if(NET.be==='p2p')P2P.close();netStat('Échec : '+((e&&e.message)||e),1);return netErr(e)}
   NET.code=code;NET.seat=0;await enterSalon()}
 async function netJoin(code){const pass=($('#netJoinPass')||{}).value||'';NET.uname=($('#netName')||{}).value.trim()||NET.uname;lsSet('ne_name',NET.uname);
   const bail=m=>{netStat(m,1);toast(m);if(NET.be==='p2p')P2P.close()};
