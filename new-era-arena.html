@@ -1381,6 +1381,8 @@ const byId=id=>G.units.find(x=>x.id===id);
 async function sha(t){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){let h=5381;for(const ch of t)h=((h<<5)+h+ch.charCodeAt(0))|0;return'f'+(h>>>0).toString(16)}}
 const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* ---- transport direct (WebRTC via PeerJS) : mini-base répliquée, le créateur du salon fait autorité ---- */
+const ICE={config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'},{urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}]}};
+const netStat=(m,bad)=>{const e=$('#netStat');if(e){e.textContent=m;e.style.color=bad?'#ff8b8b':'#9fb0d0'}};
 const P2P={peer:null,host:false,code:null,conns:[],hc:null,store:new Map(),ls:[],pend:new Map(),pid:0,leases:new Map(),peerCb:null,uids:[],saveT:0,ready:false};
 const jc=x=>x==null?x:JSON.parse(JSON.stringify(x));
 function loadPeerJS(){return new Promise((ok,ko)=>{if(window.Peer)return ok();const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js';
@@ -1414,7 +1416,7 @@ function p2pPeers(){P2P.uids=[NET.uid,...P2P.conns.filter(c=>c.open&&c.uid).map(
 P2P.roomCap={join:async()=>({presence(){},onPeers(cb){P2P.peerCb=cb;setTimeout(()=>{if(P2P.host)p2pPeers();else if(P2P.uids.length)cb({peers:P2P.uids.map(u=>({presence:{uid:u}}))})},0);return()=>{P2P.peerCb=null}},leave:async()=>{P2P.peerCb=null}})};
 P2P.hostRoom=function(code,restore){return new Promise((ok,ko)=>{P2P.close();P2P.host=true;P2P.code=code;
   if(restore){try{P2P.store=new Map(JSON.parse(lsGet('ne_p2p_'+code)||'[]'))}catch(e){}}
-  let tries=0;const start=()=>{const pe=P2P.peer=new Peer('neera-'+code.toLowerCase());
+  let tries=0;const start=()=>{const pe=P2P.peer=new Peer('neera-'+code.toLowerCase(),ICE);
     pe.on('open',()=>{P2P.ready=true;ok()});
     pe.on('error',e=>{if(e.type==='unavailable-id'&&restore&&tries++<6){try{pe.destroy()}catch(x){}setTimeout(start,2500);return}ko(new Error(e.type==='unavailable-id'?'Ce code est déjà utilisé':(e.type||e.message)));});
     pe.on('connection',c=>{if(P2P.conns.filter(x=>x.open).length>=3){setTimeout(()=>c.close(),300);return}
@@ -1423,13 +1425,13 @@ P2P.hostRoom=function(code,restore){return new Promise((ok,ko)=>{P2P.close();P2P
         if(m.op){try{const res=p2pExec(m.op);c.send({id:m.id,res})}catch(e){c.send({id:m.id,err:e.message})}}});
       c.on('close',()=>{c.open=false;P2P.conns=P2P.conns.filter(x=>x!==c);p2pPeers()})})};start()})};
 P2P.joinRoom=function(code){return new Promise((ok,ko)=>{P2P.close();P2P.host=false;P2P.code=code;let done=false;const fail=m=>{if(!done){done=true;ko(new Error(m))}};
-  const pe=P2P.peer=new Peer();setTimeout(()=>fail('Salon injoignable (délai dépassé)'),14000);
-  pe.on('error',e=>fail(e.type==='peer-unavailable'?'Salon introuvable (l\'hôte est-il en ligne ?)':(e.type||e.message)));
-  pe.on('open',()=>{const c=P2P.hc=pe.connect('neera-'+code.toLowerCase(),{reliable:true,serialization:'json'});
+  netStat('1/3 Connexion au serveur PeerJS…');const pe=P2P.peer=new Peer(undefined,ICE);setTimeout(()=>{if(!pe.id)fail('Serveur PeerJS injoignable (réseau ou blocage du site)')},10000);setTimeout(()=>fail('Connexion directe à l\'hôte impossible (pare-feu/NAT, ou l\'hôte a fermé sa page)'),25000);
+  pe.on('error',e=>fail(e.type==='peer-unavailable'?'Salon introuvable : l\'hôte n\'est plus en ligne (annonce périmée)':('Erreur PeerJS : '+(e.type||e.message))));
+  pe.on('open',()=>{netStat('2/3 Connexion à l\'hôte…');const c=P2P.hc=pe.connect('neera-'+code.toLowerCase(),{reliable:true,serialization:'json'});
     c.on('open',()=>c.send({hello:NET.uid}));
     c.on('close',()=>{if(P2P.peer===pe&&NET.started){toast('Connexion à l\'hôte perdue');NET.desync=true;renderTop()}else if(P2P.peer===pe&&G.phase==='net'){toast('Le salon a été fermé')}});
     c.on('data',m=>{
-      if(m.sync){P2P.store=new Map(m.sync);P2P.ready=true;if(!done){done=true;ok()}return}
+      if(m.sync){netStat('3/3 Salon synchronisé');P2P.store=new Map(m.sync);P2P.ready=true;if(!done){done=true;ok()}return}
       if(m.w!==undefined){p2pApply(m.w,m.d);return}
       if(m.peers){P2P.uids=m.peers;if(P2P.peerCb)P2P.peerCb({peers:m.peers.map(u=>({presence:{uid:u}}))});return}
       if(m.id&&P2P.pend.has(m.id)){const q=P2P.pend.get(m.id);P2P.pend.delete(m.id);m.err?q.ko(new Error(m.err)):q.ok(m.res)}})})})};
@@ -1515,7 +1517,7 @@ async function netHome(mode){if(mode)NET.mode=mode;mode=NET.mode;G.phase='net';G
    <div class="netgrid">
     <div class="netbox"><h3>Ton pseudo</h3><input id="netName" maxlength="20" value="${esc(NET.uname)}" autocomplete="off"></div>
     <div class="netbox"><h3>Héberger un salon</h3><input id="netRoom" placeholder="Nom du salon" maxlength="24" autocomplete="off"><input id="netPass" type="password" placeholder="Mot de passe (facultatif)" maxlength="40" autocomplete="off"><button class="btn" id="netCreate">Créer le salon</button></div>
-    <div class="netbox"><h3>Rejoindre un salon</h3>${p2?'<input id="netCode" placeholder="Code du salon (5 lettres)" maxlength="5" autocomplete="off" style="text-transform:uppercase">':''}<input id="netJoinPass" type="password" placeholder="Mot de passe du salon" maxlength="40" autocomplete="off">${p2?'<button class="btn" id="netJoinBtn">Rejoindre par code</button>':''}<div id="netList" class="netlist"></div></div>
+    <div class="netbox"><h3>Rejoindre un salon</h3>${p2?'<input id="netCode" placeholder="Code du salon (5 lettres)" maxlength="5" autocomplete="off" style="text-transform:uppercase">':''}<input id="netJoinPass" type="password" placeholder="Mot de passe du salon" maxlength="40" autocomplete="off">${p2?'<button class="btn" id="netJoinBtn">Rejoindre par code</button>':''}<div id="netList" class="netlist"></div><small id="netStat" style="min-height:1.2em"></small></div>
    </div>
    <div class="ovbar"><button class="btn" id="netBack"><kbd>Échap</kbd> Retour</button>${canBoth?`<button class="btn" id="netBe">Connexion : <b>${p2?'directe (code)':'salons Claude'}</b></button>`:''}${last?`<button class="btn on" id="netResume">Reprendre ma partie (${esc(last.code)})</button>`:''}</div></div>`;
   $('#netBack').onclick=netBack;$('#netCreate').onclick=netCreate;if(last)$('#netResume').onclick=()=>netResume(last);
@@ -1537,7 +1539,7 @@ async function netCreate(){const name=$('#netRoom').value.trim(),pass=$('#netPas
   try{if(NET.be==='p2p')await P2P.hostRoom(code);await NET.db.doc('rooms/'+code).set(doc)}catch(e){return netErr(e)}
   NET.code=code;NET.seat=0;await enterSalon()}
 async function netJoin(code){const pass=($('#netJoinPass')||{}).value||'';NET.uname=($('#netName')||{}).value.trim()||NET.uname;lsSet('ne_name',NET.uname);
-  const bail=m=>{toast(m);if(NET.be==='p2p')P2P.close()};
+  const bail=m=>{netStat(m,1);toast(m);if(NET.be==='p2p')P2P.close()};
   try{if(NET.be==='p2p')await P2P.joinRoom(code);const ref=NET.db.doc('rooms/'+code),snap=await ref.get();if(!snap.exists){bail('Salon introuvable');return}let d=snap.data();
     if(d.hash&&await sha(d.salt+':'+pass)!==d.hash){bail('Mot de passe incorrect');return}
     const find=x=>seatList(x).find(i=>x['id'+i]===NET.uid);
@@ -1547,7 +1549,7 @@ async function netJoin(code){const pass=($('#netJoinPass')||{}).value||'';NET.un
       d=(await ref.get()).data();seat=find(d);
       if(seat==null){seat=seatList(d).find(i=>!d['id'+i]);if(seat==null){bail('Salon complet');return}
         await ref.update({['id'+seat]:NET.uid,['nm'+seat]:NET.uname,n:seatList(d).filter(i=>d['id'+i]).length+1,upd:Date.now()})}}
-    NET.mode=d.mode||2;NET.code=code;NET.seat=seat;await enterSalon()}catch(e){if(NET.be==='p2p')P2P.close();netErr(e)}}
+    NET.mode=d.mode||2;NET.code=code;NET.seat=seat;await enterSalon()}catch(e){if(NET.be==='p2p')P2P.close();netStat('Échec : '+((e&&e.message)||e),1);netErr(e)}}
 async function netResume(last){try{NET.be=last.be||'claude';if(!await netUse(NET.be)){toast('Connexion indisponible');return netHome()}
     if(NET.be==='p2p'){NET.uid=last.uid;if(last.seat===0)await P2P.hostRoom(last.code,true);else await P2P.joinRoom(last.code)}
     const snap=await NET.db.doc('rooms/'+last.code).get();if(!snap.exists||snap.data().status==='over'){lsSet('ne_last','');toast('Cette partie n\'existe plus');return netHome()}
