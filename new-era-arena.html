@@ -1435,6 +1435,18 @@ P2P.joinRoom=function(code){return new Promise((ok,ko)=>{P2P.close();P2P.host=fa
       if(m.id&&P2P.pend.has(m.id)){const q=P2P.pend.get(m.id);P2P.pend.delete(m.id);m.err?q.ko(new Error(m.err)):q.ok(m.res)}})})})};
 P2P.close=function(){try{for(const c of P2P.conns)c.close()}catch(e){}try{if(P2P.hc)P2P.hc.close()}catch(e){}try{if(P2P.peer)P2P.peer.destroy()}catch(e){}
   P2P.peer=null;P2P.hc=null;P2P.conns=[];P2P.store=new Map();P2P.ls=[];P2P.pend=new Map();P2P.uids=[];P2P.ready=false;P2P.host=false;P2P.peerCb=null};
+const LOBBY='https://ntfy.sh/neera-lobby-v1';
+async function lobbyPost(o){try{await fetch(LOBBY,{method:'POST',body:JSON.stringify(o)})}catch(e){}}
+async function lobbyFetch(){const r=await fetch(LOBBY+'/json?poll=1&since=2m');const t=await r.text(),m=new Map();
+  for(const ln of t.split('\n')){if(!ln.trim())continue;try{const e=JSON.parse(ln);if(e.event!=='message')continue;const o=JSON.parse(e.message);o.time=e.time*1000;if(!m.has(o.code)||m.get(o.code).time<=o.time)m.set(o.code,o)}catch(x){}}
+  return[...m.values()].filter(o=>!o.closed&&Date.now()-o.time<50000)}
+function lobbyAnnounce(){const d=NET.doc;if(NET.be!=='p2p'||NET.seat!==0||!d||d.status!=='lobby'||NET.started)return;lobbyPost({code:NET.code,name:d.name,mode:d.mode||2,host:d.nm0,n:seatList(d).filter(i=>d['id'+i]).length,lock:!!d.hash})}
+function lobbyStop(){if(NET.annIv){clearInterval(NET.annIv);NET.annIv=null;if(NET.code)lobbyPost({code:NET.code,closed:true})}}
+async function lobbyRefresh(){const el=$('#netList');if(!el||NET.be!=='p2p')return;
+  try{const rows=(await lobbyFetch()).filter(o=>(o.mode||2)===NET.mode);
+    el.innerHTML=rows.length?rows.map(r=>`<div class="nrow"><span class="nlock">${r.lock?'🔒':'🔓'}</span><span class="nn"><b>${esc(r.name)}</b><small>${esc(r.host)} · ${r.n}/${r.mode} · #${esc(r.code)}</small></span><button class="btn" data-c="${esc(r.code)}" ${r.n>=r.mode?'disabled':''}>Rejoindre</button></div>`).join(''):'<div class="nrow"><small>Aucun salon ouvert pour l\'instant. Héberge le tien !</small></div>';
+    el.querySelectorAll('button[data-c]').forEach(b=>b.onclick=()=>netJoin(b.dataset.c))}
+  catch(e){el.innerHTML='<div class="nrow"><small>Liste indisponible (réseau ou service bloqué). Entre le code à la main.</small></div>'}}
 async function netUse(be){NET.be=be;lsSet('ne_be',be);
   if(be==='claude'){if(!NET.cl&&!await netInit())return false;NET.db=NET.cl.db;NET.roomCap=NET.cl.roomCap;NET.uid=NET.cl.uid;NET.ok=true;return true}
   try{await loadPeerJS()}catch(e){NET.err=e.message;return false}
@@ -1503,20 +1515,20 @@ async function netHome(mode){if(mode)NET.mode=mode;mode=NET.mode;G.phase='net';G
    <div class="netgrid">
     <div class="netbox"><h3>Ton pseudo</h3><input id="netName" maxlength="20" value="${esc(NET.uname)}" autocomplete="off"></div>
     <div class="netbox"><h3>Héberger un salon</h3><input id="netRoom" placeholder="Nom du salon" maxlength="24" autocomplete="off"><input id="netPass" type="password" placeholder="Mot de passe (facultatif)" maxlength="40" autocomplete="off"><button class="btn" id="netCreate">Créer le salon</button></div>
-    <div class="netbox"><h3>Rejoindre un salon</h3>${p2?'<input id="netCode" placeholder="Code du salon (5 lettres)" maxlength="5" autocomplete="off" style="text-transform:uppercase">':''}<input id="netJoinPass" type="password" placeholder="Mot de passe du salon" maxlength="40" autocomplete="off">${p2?'<button class="btn" id="netJoinBtn">Rejoindre</button>':'<div id="netList" class="netlist"></div>'}</div>
+    <div class="netbox"><h3>Rejoindre un salon</h3>${p2?'<input id="netCode" placeholder="Code du salon (5 lettres)" maxlength="5" autocomplete="off" style="text-transform:uppercase">':''}<input id="netJoinPass" type="password" placeholder="Mot de passe du salon" maxlength="40" autocomplete="off">${p2?'<button class="btn" id="netJoinBtn">Rejoindre par code</button>':''}<div id="netList" class="netlist"></div></div>
    </div>
    <div class="ovbar"><button class="btn" id="netBack"><kbd>Échap</kbd> Retour</button>${canBoth?`<button class="btn" id="netBe">Connexion : <b>${p2?'directe (code)':'salons Claude'}</b></button>`:''}${last?`<button class="btn on" id="netResume">Reprendre ma partie (${esc(last.code)})</button>`:''}</div></div>`;
   $('#netBack').onclick=netBack;$('#netCreate').onclick=netCreate;if(last)$('#netResume').onclick=()=>netResume(last);
   $('#netName').onchange=e=>{NET.uname=e.target.value.trim()||'Joueur';lsSet('ne_name',NET.uname)};
   if($('#netBe'))$('#netBe').onclick=()=>{NET.be=p2?'claude':'p2p';lsSet('ne_be',NET.be);netHome()};
-  if(p2){$('#netJoinBtn').onclick=()=>{const c=$('#netCode').value.trim().toUpperCase();if(c.length<3){toast('Entre le code du salon');return}netJoin(c)};return}
+  if(p2){$('#netJoinBtn').onclick=()=>{const c=$('#netCode').value.trim().toUpperCase();if(c.length<3){toast('Entre le code du salon');return}netJoin(c)};lobbyRefresh();NET.lobbyIv=setInterval(lobbyRefresh,8000);return}
   if(NET.listUnsub)NET.listUnsub();
   NET.listUnsub=NET.db.collection('rooms').orderBy('upd','desc').limit(30).onSnapshot(snap=>{NET.list=snap.docs.map(d=>({id:d.id,...d.data()}));renderNetList()},e=>toast('Liste des salons indisponible'))}
 function renderNetList(){const el=$('#netList');if(!el)return;const now=Date.now();
   const rows=NET.list.filter(r=>r.status!=='over'&&now-(r.upd||0)<12*3600*1000&&(r.mode||2)===NET.mode);
   el.innerHTML=rows.length?rows.map(r=>`<div class="nrow"><span class="nlock">${r.hash?'🔒':'🔓'}</span><span class="nn"><b>${esc(r.name)}</b><small>${esc(r.nm0||r.hostName)} · ${r.status==='play'?'en cours':(r.n||1)>=(r.mode||2)?'complet':'en attente '+(r.n||1)+'/'+(r.mode||2)}</small></span><button class="btn" data-c="${esc(r.id)}">Rejoindre</button></div>`).join(''):'<div class="nrow"><small>Aucun salon ouvert. Héberge le tien !</small></div>';
   el.querySelectorAll('button[data-c]').forEach(b=>b.onclick=()=>netJoin(b.dataset.c))}
-function netBack(){if(NET.listUnsub){NET.listUnsub();NET.listUnsub=null}$('#overlay').className='';startMenu()}
+function netBack(){if(NET.lobbyIv){clearInterval(NET.lobbyIv);NET.lobbyIv=null}if(NET.listUnsub){NET.listUnsub();NET.listUnsub=null}$('#overlay').className='';startMenu()}
 async function netCreate(){const name=$('#netRoom').value.trim(),pass=$('#netPass').value;NET.uname=$('#netName').value.trim()||'Joueur';lsSet('ne_name',NET.uname);
   if(!name){toast('Donne un nom au salon');return}
   const salt=Math.random().toString(36).slice(2,10),hash=pass?await sha(salt+':'+pass):'',code=genCode(),M=NET.mode;
@@ -1540,7 +1552,8 @@ async function netResume(last){try{NET.be=last.be||'claude';if(!await netUse(NET
     if(NET.be==='p2p'){NET.uid=last.uid;if(last.seat===0)await P2P.hostRoom(last.code,true);else await P2P.joinRoom(last.code)}
     const snap=await NET.db.doc('rooms/'+last.code).get();if(!snap.exists||snap.data().status==='over'){lsSet('ne_last','');toast('Cette partie n\'existe plus');return netHome()}
     NET.uid=last.uid;NET.code=last.code;NET.seat=last.seat||0;NET.mode=snap.data().mode||2;await enterSalon()}catch(e){netErr(e)}}
-async function enterSalon(){if(NET.listUnsub){NET.listUnsub();NET.listUnsub=null}
+async function enterSalon(){if(NET.listUnsub){NET.listUnsub();NET.listUnsub=null}if(NET.lobbyIv){clearInterval(NET.lobbyIv);NET.lobbyIv=null}
+  if(NET.be==='p2p'&&NET.seat===0){lobbyStop();NET.annIv=setInterval(lobbyAnnounce,15000);setTimeout(lobbyAnnounce,1500)}
   lsSet('ne_last',JSON.stringify({code:NET.code,seat:NET.seat,uid:NET.uid,be:NET.be}));
   NET.started=false;NET.startSent=false;NET.confirmed=false;NET.desync=false;NET.chk={};NET.seq=0;NET.queue=[];NET.doc=null;G.online=true;G.seats=NET.mode;G.mySeat=NET.seat;G.phase='net';NET.view='salon';
   NET.unsub.push(NET.db.doc('rooms/'+NET.code).onSnapshot(netDoc,e=>netErr(e)));
@@ -1571,6 +1584,7 @@ function netDoc(snap){
   if(!snap.exists){if(!NET.started){toast('Le salon a été fermé');netLeave(true)}return}
   const d=NET.doc=snap.data(),L=seatList(d),me=NET.seat;
   if(G.phase==='net')renderSalon();
+  if(NET.annIv){const k=seatList(d).filter(i=>d['id'+i]).length;if(NET.annKey!==k){NET.annKey=k;lobbyAnnounce()}}
   if(G.phase==='pick'&&G.online){
     if(NET.confirmed&&!(d['pk'+me]&&d['pk'+me].length)){NET.confirmed=false;G.picks[me]=[];toast('Choix en conflit : recompose ton équipe')}
     for(const o of L){if(o===me)continue;const mp=pkOf(d,o);if(G.picks[o].map(c=>c.num).join()!==mp.map(c=>c.num).join()){G.picks[o]=mp;G.picks[me]=G.picks[me].filter(c=>!mp.includes(c))}}
@@ -1588,7 +1602,7 @@ async function netConfirmPicks(){const t=NET.seat,nums=G.picks[t].map(d=>d.num);
   try{const d=(await NET.db.doc('rooms/'+NET.code).get()).data(),L=seatList(d),taken=[].concat(...L.filter(i=>i!==t).map(i=>d['pk'+i]||[]));
     if(nums.some(n=>taken.includes(n))){toast('Un de tes personnages vient d\'être pris');for(const o of L)if(o!==t)G.picks[o]=pkOf(d,o);G.picks[t]=G.picks[t].filter(c=>!taken.includes(c.num));showPick();return}
     NET.confirmed=true;await NET.db.doc('rooms/'+NET.code).update({['pk'+t]:nums,upd:Date.now()});showWait()}catch(e){NET.confirmed=false;netErr(e)}}
-async function startNetGame(){if(NET.started)return;NET.started=true;const d=NET.doc;
+async function startNetGame(){if(NET.started)return;NET.started=true;lobbyStop();const d=NET.doc;
   seedRng(d.seed);G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;G.board=boardOf(d);G.events=d.events!==false;resetGame();G.nid=1;G.online=true;G.bot=false;G.seats=d.mode||2;G.mySeat=NET.seat;G.names=[0,1,2,3].map(i=>d['nm'+i]||'');
   G.picks=[0,1,2,3].map(i=>pkOf(d,i));
   $('#overlay').className='';CAMHOME.yaw=NET.seat%2?Math.PI:0;Object.assign(CAMT,CAMHOME);Object.assign(CAMC,CAMHOME);
@@ -1596,7 +1610,7 @@ async function startNetGame(){if(NET.started)return;NET.started=true;const d=NET
   NET.unsub.push(NET.db.collection(`rooms/${NET.code}/moves`).orderBy('n').onSnapshot(netMoves,e=>netErr(e)));
   setTimeout(()=>{if(NET.catchup&&!NET.firstMoves){NET.firstMoves=true;netPump()}},4000);refresh()}
 function netOver(){if(G.online&&NET.seat===0&&NET.db)NET.db.doc('rooms/'+NET.code).update({status:'over',upd:Date.now()}).catch(()=>{});lsSet('ne_last','')}
-async function netLeave(toMenu){for(const u of NET.unsub.splice(0))try{u()}catch(e){}
+async function netLeave(toMenu){lobbyStop();for(const u of NET.unsub.splice(0))try{u()}catch(e){}
   if(NET.listUnsub){NET.listUnsub();NET.listUnsub=null}
   if(NET.rh){try{await NET.rh.leave()}catch(e){}NET.rh=null}
   if(NET.db&&NET.code&&NET.seat===0&&!NET.started){try{await NET.db.doc('rooms/'+NET.code).delete()}catch(e){}}
