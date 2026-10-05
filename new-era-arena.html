@@ -1380,11 +1380,71 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const byId=id=>G.units.find(x=>x.id===id);
 async function sha(t){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){let h=5381;for(const ch of t)h=((h<<5)+h+ch.charCodeAt(0))|0;return'f'+(h>>>0).toString(16)}}
 const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function netInit(){if(NET.ok)return true;
+/* ---- transport direct (WebRTC via PeerJS) : mini-base répliquée, le créateur du salon fait autorité ---- */
+const P2P={peer:null,host:false,code:null,conns:[],hc:null,store:new Map(),ls:[],pend:new Map(),pid:0,leases:new Map(),peerCb:null,uids:[],saveT:0,ready:false};
+const jc=x=>x==null?x:JSON.parse(JSON.stringify(x));
+function loadPeerJS(){return new Promise((ok,ko)=>{if(window.Peer)return ok();const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js';
+  s.onload=()=>window.Peer?ok():ko(new Error('PeerJS indisponible'));s.onerror=()=>ko(new Error('Impossible de charger PeerJS'));document.head.appendChild(s);setTimeout(()=>ko(new Error('PeerJS : délai dépassé')),10000)})}
+const pSnap=(p,d)=>({id:p.split('/').pop(),exists:d!=null,data:()=>jc(d),metadata:{}});
+const pParent=p=>p.slice(0,p.lastIndexOf('/'));
+function pColl(p,q={}){const r={path:p,where:()=>r,orderBy:(f,d)=>pColl(p,{...q,o:f,d}),limit:n=>pColl(p,{...q,l:n}),doc:id=>pDoc(p+'/'+(id||Math.random().toString(36).slice(2,10))),
+    list(){let a=[...P2P.store].filter(([k])=>pParent(k)===p).map(([k,d])=>({id:k.split('/').pop(),d}));
+      if(q.o)a.sort((x,y)=>{const u=x.d[q.o],v=y.d[q.o];return(u<v?-1:u>v?1:0)*(q.d==='desc'?-1:1)});else a.sort((x,y)=>x.id<y.id?-1:1);if(q.l)a=a.slice(0,q.l);return a},
+    snap(changed,known){const a=this.list();return{docs:a.map(x=>pSnap(p+'/'+x.id,x.d)),size:a.length,empty:!a.length,docChanges:()=>changed.filter(k=>P2P.store.has(k)).map(k=>({type:known.has(k)?'modified':'added',doc:pSnap(k,P2P.store.get(k))}))}},
+    async get(){return this.snap([],new Set())},
+    onSnapshot(next){const l={p,cb:next,known:new Set(),coll:r};P2P.ls.push(l);setTimeout(()=>{const keys=r.list().map(x=>p+'/'+x.id);next(r.snap(keys,l.known));keys.forEach(k=>l.known.add(k))},0);return()=>{P2P.ls=P2P.ls.filter(x=>x!==l)}}};return r}
+function pDoc(p){return{id:p.split('/').pop(),path:p,get:async()=>pSnap(p,P2P.store.get(p)),set:d=>P2P.write({t:'set',p,d}),update:d=>P2P.write({t:'update',p,d}),delete:()=>P2P.write({t:'delete',p}),
+  acquire:o=>P2P.write({t:'acquire',p,h:o.holder,ttl:o.ttlMs||4000}),collection:c=>pColl(p+'/'+c),
+  onSnapshot(next){const l={p,cb:next,doc:1};P2P.ls.push(l);setTimeout(()=>next(pSnap(p,P2P.store.get(p))),0);return()=>{P2P.ls=P2P.ls.filter(x=>x!==l)}}}}
+const P2PDB={doc:pDoc,collection:p=>pColl(p)};
+function p2pNotify(p,d){for(const l of P2P.ls.slice()){try{if(l.doc){if(l.p===p)l.cb(pSnap(p,d))}else if(pParent(p)===l.p){l.cb(l.coll.snap([p],l.known));if(d!=null)l.known.add(p);else l.known.delete(p)}}catch(e){console.warn(e)}}}
+function p2pApply(p,d){if(d==null)P2P.store.delete(p);else P2P.store.set(p,d);p2pNotify(p,d);
+  if(P2P.host&&!P2P.saveT)P2P.saveT=setTimeout(()=>{P2P.saveT=0;try{lsSet('ne_p2p_'+P2P.code,JSON.stringify([...P2P.store]))}catch(e){}},400)}
+const p2pBc=m=>{for(const c of P2P.conns)if(c.open)try{c.send(m)}catch(e){}};
+function p2pExec(op){const p=op.p;
+  if(op.t==='set'){const d=jc(op.d);p2pApply(p,d);p2pBc({w:p,d});return 1}
+  if(op.t==='update'){if(!P2P.store.has(p))throw new Error('invalid_argument');const d={...P2P.store.get(p),...jc(op.d)};p2pApply(p,d);p2pBc({w:p,d});return 1}
+  if(op.t==='delete'){p2pApply(p,null);p2pBc({w:p,d:null});return 1}
+  if(op.t==='acquire'){const l=P2P.leases.get(p);if(l&&l.exp>Date.now()&&l.h!==op.h)return{acquired:false};P2P.leases.set(p,{h:op.h,exp:Date.now()+op.ttl});return{acquired:true}}}
+P2P.write=op=>{if(!P2P.peer)return Promise.reject(new Error('Connexion fermée'));
+  if(P2P.host)try{return Promise.resolve(p2pExec(op))}catch(e){return Promise.reject(e)}
+  return new Promise((ok,ko)=>{const id=++P2P.pid;P2P.pend.set(id,{ok,ko});try{P2P.hc.send({id,op})}catch(e){P2P.pend.delete(id);return ko(e)}
+    setTimeout(()=>{if(P2P.pend.has(id)){P2P.pend.delete(id);ko(new Error('L\'hôte ne répond pas'))}},10000)})};
+function p2pPeers(){P2P.uids=[NET.uid,...P2P.conns.filter(c=>c.open&&c.uid).map(c=>c.uid)];p2pBc({peers:P2P.uids});if(P2P.peerCb)P2P.peerCb({peers:P2P.uids.map(u=>({presence:{uid:u}}))})}
+P2P.roomCap={join:async()=>({presence(){},onPeers(cb){P2P.peerCb=cb;setTimeout(()=>{if(P2P.host)p2pPeers();else if(P2P.uids.length)cb({peers:P2P.uids.map(u=>({presence:{uid:u}}))})},0);return()=>{P2P.peerCb=null}},leave:async()=>{P2P.peerCb=null}})};
+P2P.hostRoom=function(code,restore){return new Promise((ok,ko)=>{P2P.close();P2P.host=true;P2P.code=code;
+  if(restore){try{P2P.store=new Map(JSON.parse(lsGet('ne_p2p_'+code)||'[]'))}catch(e){}}
+  let tries=0;const start=()=>{const pe=P2P.peer=new Peer('neera-'+code.toLowerCase());
+    pe.on('open',()=>{P2P.ready=true;ok()});
+    pe.on('error',e=>{if(e.type==='unavailable-id'&&restore&&tries++<6){try{pe.destroy()}catch(x){}setTimeout(start,2500);return}ko(new Error(e.type==='unavailable-id'?'Ce code est déjà utilisé':(e.type||e.message)));});
+    pe.on('connection',c=>{if(P2P.conns.filter(x=>x.open).length>=3){setTimeout(()=>c.close(),300);return}
+      c.on('open',()=>{c.open=true;P2P.conns.push(c)});
+      c.on('data',m=>{if(m.hello){c.uid=m.hello;c.send({sync:[...P2P.store]});p2pPeers();return}
+        if(m.op){try{const res=p2pExec(m.op);c.send({id:m.id,res})}catch(e){c.send({id:m.id,err:e.message})}}});
+      c.on('close',()=>{c.open=false;P2P.conns=P2P.conns.filter(x=>x!==c);p2pPeers()})})};start()})};
+P2P.joinRoom=function(code){return new Promise((ok,ko)=>{P2P.close();P2P.host=false;P2P.code=code;let done=false;const fail=m=>{if(!done){done=true;ko(new Error(m))}};
+  const pe=P2P.peer=new Peer();setTimeout(()=>fail('Salon injoignable (délai dépassé)'),14000);
+  pe.on('error',e=>fail(e.type==='peer-unavailable'?'Salon introuvable (l\'hôte est-il en ligne ?)':(e.type||e.message)));
+  pe.on('open',()=>{const c=P2P.hc=pe.connect('neera-'+code.toLowerCase(),{reliable:true,serialization:'json'});
+    c.on('open',()=>c.send({hello:NET.uid}));
+    c.on('close',()=>{if(P2P.peer===pe&&NET.started){toast('Connexion à l\'hôte perdue');NET.desync=true;renderTop()}else if(P2P.peer===pe&&G.phase==='net'){toast('Le salon a été fermé')}});
+    c.on('data',m=>{
+      if(m.sync){P2P.store=new Map(m.sync);P2P.ready=true;if(!done){done=true;ok()}return}
+      if(m.w!==undefined){p2pApply(m.w,m.d);return}
+      if(m.peers){P2P.uids=m.peers;if(P2P.peerCb)P2P.peerCb({peers:m.peers.map(u=>({presence:{uid:u}}))});return}
+      if(m.id&&P2P.pend.has(m.id)){const q=P2P.pend.get(m.id);P2P.pend.delete(m.id);m.err?q.ko(new Error(m.err)):q.ok(m.res)}})})})};
+P2P.close=function(){try{for(const c of P2P.conns)c.close()}catch(e){}try{if(P2P.hc)P2P.hc.close()}catch(e){}try{if(P2P.peer)P2P.peer.destroy()}catch(e){}
+  P2P.peer=null;P2P.hc=null;P2P.conns=[];P2P.store=new Map();P2P.ls=[];P2P.pend=new Map();P2P.uids=[];P2P.ready=false;P2P.host=false;P2P.peerCb=null};
+async function netUse(be){NET.be=be;lsSet('ne_be',be);
+  if(be==='claude'){if(!NET.cl&&!await netInit())return false;NET.db=NET.cl.db;NET.roomCap=NET.cl.roomCap;NET.uid=NET.cl.uid;NET.ok=true;return true}
+  try{await loadPeerJS()}catch(e){NET.err=e.message;return false}
+  let id=lsGet('ne_pid');if(!id){id=Math.random().toString(36).slice(2,10);lsSet('ne_pid',id)}
+  NET.db=P2PDB;NET.roomCap=P2P.roomCap;NET.uid='p-'+id+'-'+NET.tab;NET.uname=lsGet('ne_name')||NET.uname||'Joueur';return true}
+async function netInit(){if(NET.cl)return true;
   try{const c=window.claude;if(!c||!c.use)return false;NET.db=await c.use('db');if(!NET.db)return false;
     let id=null,nm='';try{const us=await c.use('user');if(us){id=await us.id();const me=await us.me();nm=(me&&me.name)||''}}catch(e){}
     NET.uid=(id||'anon')+'-'+NET.tab;try{NET.roomCap=await c.use('room')}catch(e){}
-    NET.uname=lsGet('ne_name')||nm||'Joueur';NET.ok=true;return true}catch(e){return false}}
+    NET.uname=lsGet('ne_name')||nm||'Joueur';NET.cl={db:NET.db,roomCap:NET.roomCap,uid:NET.uid};NET.ok=true;return true}catch(e){return false}}
 const netErr=e=>{console.warn('net',e);toast('Erreur réseau : '+((e&&e.message)||e))};
 
 /* ---- journal d'actions ---- */
@@ -1433,18 +1493,23 @@ const pkOf=(d,i)=>(d['pk'+i]||[]).map(n=>CHARS.find(c=>c.num===n)).filter(Boolea
 async function netHome(mode){if(mode)NET.mode=mode;mode=NET.mode;G.phase='net';G.online=false;NET.view='home';const ov=$('#overlay');ov.className='on';
   const ttl=mode===4?'Quatre joueurs':'Deux joueurs';
   ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> · ${ttl}</h1><p>Connexion…</p></div>`;refresh();
-  if(!await netInit()){ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> · ${ttl}</h1><p>Le mode hébergé demande d'ouvrir le jeu depuis claude.ai, connecté, avec un accès Contributeur à cet artifact (pour écrire dans le salon).</p><div class="ovbar"><button class="btn" id="netBack">Retour</button></div></div>`;$('#netBack').onclick=netBack;return}
+  if(!NET.be)NET.be=lsGet('ne_be')||((window.claude&&window.claude.use)?'claude':'p2p');
+  let okc=await netUse(NET.be);if(!okc&&NET.be==='claude'){okc=await netUse('p2p')}
+  if(!okc){ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> · ${ttl}</h1><p>Connexion impossible : ${esc(NET.err||'réseau indisponible')}. Le mode direct a besoin d'un accès à internet (PeerJS) ; le mode salons Claude demande d'ouvrir le jeu depuis claude.ai, connecté, avec un accès Contributeur.</p><div class="ovbar"><button class="btn" id="netBack">Retour</button></div></div>`;$('#netBack').onclick=netBack;return}
+  const p2=NET.be==='p2p',canBoth=!!(window.claude&&window.claude.use);
   const last=(()=>{try{return JSON.parse(lsGet('ne_last')||'null')}catch(e){return null}})();
   ov.innerHTML=`<div class="ov"><h1>New <span>Era</span> · ${ttl}</h1>
    <p>${mode===4?'Un joueur héberge le salon, trois autres le rejoignent : 2 contre 2 sur une méga-arène 14×14 (surface doublée). Le créateur est le Joueur 1 (Blancs), puis les arrivants prennent les places libres : Noirs, Blancs, Noirs. Chacun contrôle 4 personnages.':'Un joueur héberge le salon, l\'autre le rejoint. Le créateur joue les Blancs, celui qui rejoint joue les Noirs.'} Le mot de passe est une barrière de courtoisie : ne l'utilise pas pour autre chose.</p>
    <div class="netgrid">
     <div class="netbox"><h3>Ton pseudo</h3><input id="netName" maxlength="20" value="${esc(NET.uname)}" autocomplete="off"></div>
     <div class="netbox"><h3>Héberger un salon</h3><input id="netRoom" placeholder="Nom du salon" maxlength="24" autocomplete="off"><input id="netPass" type="password" placeholder="Mot de passe (facultatif)" maxlength="40" autocomplete="off"><button class="btn" id="netCreate">Créer le salon</button></div>
-    <div class="netbox"><h3>Rejoindre un salon</h3><input id="netJoinPass" type="password" placeholder="Mot de passe du salon" maxlength="40" autocomplete="off"><div id="netList" class="netlist"></div></div>
+    <div class="netbox"><h3>Rejoindre un salon</h3>${p2?'<input id="netCode" placeholder="Code du salon (5 lettres)" maxlength="5" autocomplete="off" style="text-transform:uppercase">':''}<input id="netJoinPass" type="password" placeholder="Mot de passe du salon" maxlength="40" autocomplete="off">${p2?'<button class="btn" id="netJoinBtn">Rejoindre</button>':'<div id="netList" class="netlist"></div>'}</div>
    </div>
-   <div class="ovbar"><button class="btn" id="netBack"><kbd>Échap</kbd> Retour</button>${last?`<button class="btn on" id="netResume">Reprendre ma partie (${esc(last.code)})</button>`:''}</div></div>`;
+   <div class="ovbar"><button class="btn" id="netBack"><kbd>Échap</kbd> Retour</button>${canBoth?`<button class="btn" id="netBe">Connexion : <b>${p2?'directe (code)':'salons Claude'}</b></button>`:''}${last?`<button class="btn on" id="netResume">Reprendre ma partie (${esc(last.code)})</button>`:''}</div></div>`;
   $('#netBack').onclick=netBack;$('#netCreate').onclick=netCreate;if(last)$('#netResume').onclick=()=>netResume(last);
   $('#netName').onchange=e=>{NET.uname=e.target.value.trim()||'Joueur';lsSet('ne_name',NET.uname)};
+  if($('#netBe'))$('#netBe').onclick=()=>{NET.be=p2?'claude':'p2p';lsSet('ne_be',NET.be);netHome()};
+  if(p2){$('#netJoinBtn').onclick=()=>{const c=$('#netCode').value.trim().toUpperCase();if(c.length<3){toast('Entre le code du salon');return}netJoin(c)};return}
   if(NET.listUnsub)NET.listUnsub();
   NET.listUnsub=NET.db.collection('rooms').orderBy('upd','desc').limit(30).onSnapshot(snap=>{NET.list=snap.docs.map(d=>({id:d.id,...d.data()}));renderNetList()},e=>toast('Liste des salons indisponible'))}
 function renderNetList(){const el=$('#netList');if(!el)return;const now=Date.now();
@@ -1457,23 +1522,26 @@ async function netCreate(){const name=$('#netRoom').value.trim(),pass=$('#netPas
   const salt=Math.random().toString(36).slice(2,10),hash=pass?await sha(salt+':'+pass):'',code=genCode(),M=NET.mode;
   const doc={name,salt,hash,mode:M,n:1,status:'lobby',variant:G.variant,budget:G.budget,defDie:G.defDie,board:M===4?MEGA:G.board,events:G.events,seed:0,created:Date.now(),upd:Date.now()};
   for(let i=0;i<4;i++){doc['id'+i]=i===0?NET.uid:'';doc['nm'+i]=i===0?NET.uname:'';doc['pk'+i]=null}
-  try{await NET.db.doc('rooms/'+code).set(doc)}catch(e){return netErr(e)}
+  try{if(NET.be==='p2p')await P2P.hostRoom(code);await NET.db.doc('rooms/'+code).set(doc)}catch(e){return netErr(e)}
   NET.code=code;NET.seat=0;await enterSalon()}
 async function netJoin(code){const pass=($('#netJoinPass')||{}).value||'';NET.uname=($('#netName')||{}).value.trim()||NET.uname;lsSet('ne_name',NET.uname);
-  try{const ref=NET.db.doc('rooms/'+code),snap=await ref.get();if(!snap.exists){toast('Salon introuvable');return}let d=snap.data();
-    if(d.hash&&await sha(d.salt+':'+pass)!==d.hash){toast('Mot de passe incorrect');return}
+  const bail=m=>{toast(m);if(NET.be==='p2p')P2P.close()};
+  try{if(NET.be==='p2p')await P2P.joinRoom(code);const ref=NET.db.doc('rooms/'+code),snap=await ref.get();if(!snap.exists){bail('Salon introuvable');return}let d=snap.data();
+    if(d.hash&&await sha(d.salt+':'+pass)!==d.hash){bail('Mot de passe incorrect');return}
     const find=x=>seatList(x).find(i=>x['id'+i]===NET.uid);
     let seat=find(d);
-    if(seat==null){if(seatList(d).every(i=>d['id'+i])){toast('Salon complet');return}
-      const l=await ref.acquire({holder:NET.uid,ttlMs:4000});if(!l.acquired){toast('Réessaie dans un instant');return}
+    if(seat==null){if(seatList(d).every(i=>d['id'+i])){bail('Salon complet');return}
+      const l=await ref.acquire({holder:NET.uid,ttlMs:4000});if(!l.acquired){bail('Réessaie dans un instant');return}
       d=(await ref.get()).data();seat=find(d);
-      if(seat==null){seat=seatList(d).find(i=>!d['id'+i]);if(seat==null){toast('Salon complet');return}
+      if(seat==null){seat=seatList(d).find(i=>!d['id'+i]);if(seat==null){bail('Salon complet');return}
         await ref.update({['id'+seat]:NET.uid,['nm'+seat]:NET.uname,n:seatList(d).filter(i=>d['id'+i]).length+1,upd:Date.now()})}}
-    NET.mode=d.mode||2;NET.code=code;NET.seat=seat;await enterSalon()}catch(e){netErr(e)}}
-async function netResume(last){try{const snap=await NET.db.doc('rooms/'+last.code).get();if(!snap.exists||snap.data().status==='over'){lsSet('ne_last','');toast('Cette partie n\'existe plus');return netHome()}
+    NET.mode=d.mode||2;NET.code=code;NET.seat=seat;await enterSalon()}catch(e){if(NET.be==='p2p')P2P.close();netErr(e)}}
+async function netResume(last){try{NET.be=last.be||'claude';if(!await netUse(NET.be)){toast('Connexion indisponible');return netHome()}
+    if(NET.be==='p2p'){NET.uid=last.uid;if(last.seat===0)await P2P.hostRoom(last.code,true);else await P2P.joinRoom(last.code)}
+    const snap=await NET.db.doc('rooms/'+last.code).get();if(!snap.exists||snap.data().status==='over'){lsSet('ne_last','');toast('Cette partie n\'existe plus');return netHome()}
     NET.uid=last.uid;NET.code=last.code;NET.seat=last.seat||0;NET.mode=snap.data().mode||2;await enterSalon()}catch(e){netErr(e)}}
 async function enterSalon(){if(NET.listUnsub){NET.listUnsub();NET.listUnsub=null}
-  lsSet('ne_last',JSON.stringify({code:NET.code,seat:NET.seat,uid:NET.uid}));
+  lsSet('ne_last',JSON.stringify({code:NET.code,seat:NET.seat,uid:NET.uid,be:NET.be}));
   NET.started=false;NET.startSent=false;NET.confirmed=false;NET.desync=false;NET.chk={};NET.seq=0;NET.queue=[];NET.doc=null;G.online=true;G.seats=NET.mode;G.mySeat=NET.seat;G.phase='net';NET.view='salon';
   NET.unsub.push(NET.db.doc('rooms/'+NET.code).onSnapshot(netDoc,e=>netErr(e)));
   NET.unsub.push(NET.db.collection(`rooms/${NET.code}/chk`).onSnapshot(netChkSnap,()=>{}));
@@ -1533,6 +1601,7 @@ async function netLeave(toMenu){for(const u of NET.unsub.splice(0))try{u()}catch
   if(NET.rh){try{await NET.rh.leave()}catch(e){}NET.rh=null}
   if(NET.db&&NET.code&&NET.seat===0&&!NET.started){try{await NET.db.doc('rooms/'+NET.code).delete()}catch(e){}}
   if(!NET.started||G.phase==='over')lsSet('ne_last','');
+  if(NET.be==='p2p'){await wait(150);P2P.close()}
   NET.code=null;NET.doc=null;NET.started=false;NET.queue=[];NET.catchup=false;NET.peers=[];G.online=false;G.fast=false;G.seats=2;
   CAMHOME.yaw=0;Object.assign(CAMT,CAMHOME);if(toMenu){$('#overlay').className='';startMenu()}}
 
