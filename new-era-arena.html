@@ -1383,6 +1383,12 @@ const esc=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 /* ---- transport direct (WebRTC via PeerJS) : mini-base répliquée, le créateur du salon fait autorité ---- */
 const ICE={config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'},{urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}]}};
 const netStat=(m,bad)=>{document.querySelectorAll('.nstat').forEach(e=>{e.textContent=m;e.style.color=bad?'#ff8b8b':'#9fb0d0'})};
+const NLOG=[];const nlog=m=>{NLOG.push(new Date().toISOString().slice(11,19)+' '+m);if(NLOG.length>150)NLOG.shift()};
+addEventListener('error',e=>nlog('ERREUR JS: '+e.message));addEventListener('unhandledrejection',e=>nlog('PROMESSE REJETÉE: '+((e.reason&&e.reason.message)||e.reason)));
+function showDiag(){let b=$('#diagbox');if(b)b.remove();b=document.createElement('div');b.id='diagbox';b.style.cssText='position:fixed;inset:6%;z-index:99;background:#0b0f1a;border:1px solid #3a4a70;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;pointer-events:auto';
+  const head=`version=26 be=${NET.be} seat=${NET.seat} mode=${NET.mode} code=${NET.code} host=${P2P.host} conns=${P2P.conns.length} relayConn=${P2P.conns.some(c=>c.relay)} hcRelay=${!!(P2P.hc&&P2P.hc.relay)} ready=${P2P.ready} Peer=${!!window.Peer} ua=${navigator.userAgent.slice(0,60)}`;
+  b.innerHTML=`<b>Diagnostic de connexion</b><textarea readonly style="flex:1;background:#05070d;color:#cfe;border:1px solid #2a3552;border-radius:6px;padding:8px;font:11px monospace">${esc(head+'\n'+NLOG.join('\n'))}</textarea><div><button class="btn" id="dgCopy">Copier</button> <button class="btn" id="dgClose">Fermer</button></div>`;
+  document.body.appendChild(b);$('#dgClose').onclick=()=>b.remove();$('#dgCopy').onclick=()=>{const t=b.querySelector('textarea');t.select();try{document.execCommand('copy');toast('Copié')}catch(e){}}}
 const P2P={peer:null,host:false,code:null,conns:[],hc:null,store:new Map(),ls:[],pend:new Map(),pid:0,leases:new Map(),peerCb:null,uids:[],saveT:0,ready:false};
 const jc=x=>x==null?x:JSON.parse(JSON.stringify(x));
 function loadPeerJS(){return new Promise((ok,ko)=>{if(window.Peer)return ok();const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js';
@@ -1409,7 +1415,7 @@ function p2pExec(op){const p=op.p;
   if(op.t==='update'){if(!P2P.store.has(p))throw new Error('invalid_argument');const d={...P2P.store.get(p),...jc(op.d)};p2pApply(p,d);p2pBc({w:p,d});return 1}
   if(op.t==='delete'){p2pApply(p,null);p2pBc({w:p,d:null});return 1}
   if(op.t==='acquire'){const l=P2P.leases.get(p);if(l&&l.exp>Date.now()&&l.h!==op.h)return{acquired:false};P2P.leases.set(p,{h:op.h,exp:Date.now()+op.ttl});return{acquired:true}}}
-P2P.write=op=>{if(!P2P.peer)return Promise.reject(new Error('Connexion fermée'));
+P2P.write=op=>{nlog((P2P.host?'écrit ':'→ hôte ')+op.t+' '+op.p.split('/').slice(2).join('/'));if(!P2P.peer)return Promise.reject(new Error('Connexion fermée'));
   if(P2P.host)try{return Promise.resolve(p2pExec(op))}catch(e){return Promise.reject(e)}
   return new Promise((ok,ko)=>{const id=RL.rid+':'+(++P2P.pid);P2P.pend.set(id,{ok,ko});try{P2P.hc.send({id,op})}catch(e){P2P.pend.delete(id);return ko(e)}
     setTimeout(()=>{if(P2P.pend.has(id)){P2P.pend.delete(id);ko(new Error('L\'hôte ne répond pas'))}},10000)})};
@@ -1432,17 +1438,17 @@ function rRelayConn(uid,dn){return{relay:true,uid,open:true,on(){},close(){},sen
   if(m.sync){const sid=(++RL.sid)+'-'+RL.rid;let part=[],len=0;const parts=[];for(const e of m.sync){const j=JSON.stringify(e).length;if(len+j>2300&&part.length){parts.push(part);part=[];len=0}part.push(e);len+=j}parts.push(part);
     parts.forEach((pt,i)=>rQueue(dn,{to:uid,m:{sync:pt,sid,i,last:i===parts.length-1}}))}
   else rQueue(dn,{to:uid,m})}}}
-function hostData(c,m){if(m.hello){c.uid=m.hello;p2pSend(c,{sync:[...P2P.store]});p2pPeers();return}
+function hostData(c,m){nlog('← '+(c.relay?'relais ':'direct ')+(m.hello?'hello '+m.hello.slice(-6):m.op?'op '+m.op.t+' '+m.op.p.split('/').slice(2).join('/'):'?'));if(m.hello){c.uid=m.hello;p2pSend(c,{sync:[...P2P.store]});p2pPeers();return}
   if(m.op){try{const res=p2pExec(m.op);const t=m.op.t;p2pSend(c,{id:m.id,res,wp:t==='acquire'?undefined:m.op.p,wd:t==='acquire'?undefined:(P2P.store.get(m.op.p)??null)})}catch(e){p2pSend(c,{id:m.id,err:e.message})}}}
 P2P.hostRoom=function(code,restore){return new Promise((ok,ko)=>{P2P.close();P2P.host=true;P2P.code=code;
   if(restore){try{P2P.store=new Map(JSON.parse(lsGet('ne_p2p_'+code)||'[]'))}catch(e){}}
   const T=rTopics(code);RL.dn=T.dn;
   rListen(T.up,it=>{let c=P2P.conns.find(x=>x.relay&&x.uid===it.u);if(!c){c=rRelayConn(it.u,T.dn);P2P.conns.push(c)}hostData(c,it.m)});
-  P2P.peer={dummy:1,destroy(){}};P2P.ready=true;let fin=false;const go=()=>{if(!fin){fin=true;ok()}};
+  P2P.peer={dummy:1,destroy(){}};P2P.ready=true;let fin=false;nlog('hôte: relais écoute '+T.up+' ; PeerJS '+(window.Peer?'présent':'absent'));const go=()=>{if(!fin){fin=true;ok()}};
   if(!window.Peer){go();return}
   let tries=0;const start=()=>{const pe=P2P.rtc=new Peer('neera-'+code.toLowerCase(),ICE);
     const tm=setTimeout(go,8000);
-    pe.on('open',()=>{clearTimeout(tm);go()});
+    pe.on('open',()=>{clearTimeout(tm);nlog('hôte: WebRTC prêt');go()});
     pe.on('error',e=>{if(e.type==='unavailable-id'){if(restore&&tries++<6){try{pe.destroy()}catch(x){}setTimeout(start,2500);return}if(!fin){fin=true;ko(new Error('Ce code est déjà utilisé'))}return}go()});
     pe.on('connection',c=>{if(P2P.conns.length>=3){setTimeout(()=>c.close(),300);return}
       P2P.conns.push(c);c.on('data',m=>hostData(c,m));
@@ -1451,11 +1457,11 @@ P2P.joinRoom=function(code){return new Promise((ok,ko)=>{P2P.close();P2P.host=fa
   const fail=m=>{if(!done){done=true;ko(new Error(m))}};
   const onData=m=>{
     if(m.sync){if(P2P.ready)return;const a=(acc[m.sid||'x']=acc[m.sid||'x']||[]);a.push(...m.sync);if(m.last===false)return;
-      netStat('3/3 Salon synchronisé');P2P.store=new Map(a);P2P.ready=true;clearInterval(P2P.helloIv);if(!done){done=true;ok()}return}
+      nlog('sync reçu ('+a.length+' docs)');netStat('3/3 Salon synchronisé');P2P.store=new Map(a);P2P.ready=true;clearInterval(P2P.helloIv);if(!done){done=true;ok()}return}
     if(m.w!==undefined){p2pApply(m.w,m.d);return}
     if(m.peers){P2P.uids=m.peers;if(P2P.peerCb)P2P.peerCb({peers:m.peers.map(u=>({presence:{uid:u}}))});return}
     if(m.id&&P2P.pend.has(m.id)){if(m.wp!==undefined)p2pApply(m.wp,m.wd);const q=P2P.pend.get(m.id);P2P.pend.delete(m.id);m.err?q.ko(new Error(m.err)):q.ok(m.res)}};
-  const toRelay=why=>{if(relay||done)return;relay=true;netStat('Connexion directe impossible ('+why+') — passage par le relais…');
+  const toRelay=why=>{if(relay||done)return;relay=true;nlog('bascule relais: '+why);netStat('Connexion directe impossible ('+why+') — passage par le relais…');
     try{if(P2P.rtc)P2P.rtc.destroy()}catch(e){}P2P.rtc=null;const T=rTopics(code);
     const hc=P2P.hc={relay:true,open:true,close(){},on(){},send:m=>rQueue(T.up,{u:NET.uid,m})};P2P.peer={dummy:1,destroy(){}};
     rListen(T.dn,it=>{if(it.to==='*'||it.to===NET.uid)onData(it.m)});
@@ -1610,8 +1616,8 @@ function renderSalon(){if(G.phase!=='net'||NET.view!=='salon')return;const d=NET
     <button class="btn" id="sEvt" ${locked?'disabled':''}>Événements : <b>${d.events===false?'désactivés':'ACTIVÉS'}</b></button>
     <button class="btn" id="sDef" ${locked?'disabled':''}>Dé de défense : <b>d${d.defDie||5}</b></button>
     <button class="btn" id="sBud" ${locked?'disabled':''}>Équilibrage : <b>${(BUDGETS.find(b=>b[0]===d.budget)||BUDGETS[2])[1]}</b></button></div></div>
-   <div class="ovbar"><button class="btn on" id="sGo" ${full?'':'disabled'}>Composer mes personnages</button><button class="btn" id="sQuit">Quitter le salon</button></div></div>`;
-  $('#sGo').onclick=netCompose;$('#sQuit').onclick=()=>netLeave(true);
+   <div class="ovbar"><button class="btn on" id="sGo" ${full?'':'disabled'}>Composer mes personnages</button><button class="btn" id="sDiag">Diagnostic</button><button class="btn" id="sQuit">Quitter le salon</button></div></div>`;
+  $('#sGo').onclick=netCompose;$('#sDiag').onclick=showDiag;$('#sQuit').onclick=()=>netLeave(true);
   $('#sVar').onclick=()=>NET.db.doc('rooms/'+NET.code).update({variant:!d.variant,upd:Date.now()}).catch(netErr);
   if($('#sBoard'))$('#sBoard').onclick=()=>NET.db.doc('rooms/'+NET.code).update({board:((d.board??2)+1)%NB,upd:Date.now()}).catch(netErr);
   $('#sEvt').onclick=()=>NET.db.doc('rooms/'+NET.code).update({events:d.events===false,upd:Date.now()}).catch(netErr);
@@ -1619,7 +1625,7 @@ function renderSalon(){if(G.phase!=='net'||NET.view!=='salon')return;const d=NET
   $('#sBud').onclick=()=>{const i=BUDGETS.findIndex(b=>b[0]===d.budget);NET.db.doc('rooms/'+NET.code).update({budget:BUDGETS[(i+1)%BUDGETS.length][0],upd:Date.now()}).catch(netErr)}}
 function netDoc(snap){
   if(!snap.exists){if(!NET.started){toast('Le salon a été fermé');netLeave(true)}return}
-  const d=NET.doc=snap.data(),L=seatList(d),me=NET.seat;
+  const d=NET.doc=snap.data(),L=seatList(d),me=NET.seat;nlog('doc salon: status='+d.status+' places='+L.map(i=>d['id'+i]?1:0).join('')+' équipes='+L.map(i=>d['pk'+i]&&d['pk'+i].length?1:0).join(''));
   if(G.phase==='net')renderSalon();
   if(NET.annIv){const k=seatList(d).filter(i=>d['id'+i]).length;if(NET.annKey!==k){NET.annKey=k;lobbyAnnounce()}}
   if(G.phase==='pick'&&G.online){
@@ -1631,13 +1637,13 @@ function netDoc(snap){
 function netTryStart(d){if(!d||d.status!=='lobby'||NET.seat!==0||NET.startSent)return;const L=seatList(d);if(!L.every(i=>d['pk'+i]&&d['pk'+i].length===4))return;
   const all=[].concat(...L.map(i=>d['pk'+i]));
   if(new Set(all).size!==all.length){const z={upd:Date.now()};for(let i=0;i<4;i++)z['pk'+i]=null;NET.db.doc('rooms/'+NET.code).update(z).catch(netErr)}
-  else{NET.startSent=true;NET.db.doc('rooms/'+NET.code).update({status:'play',seed:1+Math.floor(Math.random()*2147483000),upd:Date.now()}).catch(e=>{NET.startSent=false;netErr(e)})}}
+  else{NET.startSent=true;nlog('hôte: lance la partie');NET.db.doc('rooms/'+NET.code).update({status:'play',seed:1+Math.floor(Math.random()*2147483000),upd:Date.now()}).catch(e=>{NET.startSent=false;netErr(e)})}}
 function netCompose(){const d=NET.doc;if(!d||!seatList(d).every(i=>d['id'+i]))return;G.online=true;G.seats=d.mode||2;G.mySeat=NET.seat;G.names=[0,1,2,3].map(i=>d['nm'+i]||'');G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;G.board=boardOf(d);G.events=d.events!==false;G.phase='pick';G.pickTeam=NET.seat;G.ptab='A';G.pidx=0;NET.confirmed=false;
   G.picks=[[],[],[],[]];for(const o of seatList(d))if(o!==NET.seat)G.picks[o]=pkOf(d,o);showPick();refresh()}
 function showWait(){const ov=$('#overlay');ov.className='on';const d=NET.doc||{},L=seatList(d),via=NET.be==='p2p'?(P2P.host?(P2P.conns.some(c=>c.relay)?'relais':'directe'):(P2P.hc&&P2P.hc.relay?'relais':'directe')):'Claude';
   if(NET.seat===0&&!NET.waitIv)NET.waitIv=setInterval(()=>{if(NET.started||G.phase!=='pick'){clearInterval(NET.waitIv);NET.waitIv=null;return}netTryStart(NET.doc)},2000);
-  ov.innerHTML=`<div class="ov"><h1>Équipe <span>validée</span></h1><p>En attente ${G.seats===4?'des autres joueurs':'de l\'adversaire'}… La partie démarre dès que tous les joueurs sont prêts.</p><p>${L.map(i=>`${esc(d['nm'+i]||'J'+(i+1))} : ${d['pk'+i]&&d['pk'+i].length===4?'✔ prêt':'… compose son équipe'}`).join(' · ')} <small>(connexion ${via})</small></p><div class="ovbar"><button class="btn" id="wEdit">Modifier mes personnages</button><button class="btn" id="wQuit">Quitter le salon</button></div></div>`;
-  $('#wEdit').onclick=async()=>{NET.confirmed=false;try{await NET.db.doc('rooms/'+NET.code).update({['pk'+NET.seat]:null})}catch(e){netErr(e)}showPick()};$('#wQuit').onclick=()=>netLeave(true)}
+  ov.innerHTML=`<div class="ov"><h1>Équipe <span>validée</span></h1><p>En attente ${G.seats===4?'des autres joueurs':'de l\'adversaire'}… La partie démarre dès que tous les joueurs sont prêts.</p><p>${L.map(i=>`${esc(d['nm'+i]||'J'+(i+1))} : ${d['pk'+i]&&d['pk'+i].length===4?'✔ prêt':'… compose son équipe'}`).join(' · ')} <small>(connexion ${via})</small></p><div class="ovbar"><button class="btn" id="wDiag">Diagnostic</button><button class="btn" id="wEdit">Modifier mes personnages</button><button class="btn" id="wQuit">Quitter le salon</button></div></div>`;
+  $('#wDiag').onclick=showDiag;$('#wEdit').onclick=async()=>{NET.confirmed=false;try{await NET.db.doc('rooms/'+NET.code).update({['pk'+NET.seat]:null})}catch(e){netErr(e)}showPick()};$('#wQuit').onclick=()=>netLeave(true)}
 async function netConfirmPicks(){const t=NET.seat,nums=G.picks[t].map(d=>d.num);
   try{const d=(await NET.db.doc('rooms/'+NET.code).get()).data(),L=seatList(d),taken=[].concat(...L.filter(i=>i!==t).map(i=>d['pk'+i]||[]));
     if(nums.some(n=>taken.includes(n))){toast('Un de tes personnages vient d\'être pris');for(const o of L)if(o!==t)G.picks[o]=pkOf(d,o);G.picks[t]=G.picks[t].filter(c=>!taken.includes(c.num));showPick();return}
