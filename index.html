@@ -1404,7 +1404,8 @@ const P2PDB={doc:pDoc,collection:p=>pColl(p)};
 function p2pNotify(p,d){for(const l of P2P.ls.slice()){try{if(l.doc){if(l.p===p)l.cb(pSnap(p,d))}else if(pParent(p)===l.p){l.cb(l.coll.snap([p],l.known));if(d!=null)l.known.add(p);else l.known.delete(p)}}catch(e){console.warn(e)}}}
 function p2pApply(p,d){if(d==null)P2P.store.delete(p);else P2P.store.set(p,d);p2pNotify(p,d);
   if(P2P.host&&!P2P.saveT)P2P.saveT=setTimeout(()=>{P2P.saveT=0;try{lsSet('ne_p2p_'+P2P.code,JSON.stringify([...P2P.store]))}catch(e){}},400)}
-const p2pBc=m=>{for(const c of P2P.conns)if(c.open)try{c.send(m)}catch(e){}};
+const p2pSend=(c,m)=>{try{if(c.open)c.send(m);else c.on('open',()=>{try{c.send(m)}catch(e){}})}catch(e){}};
+const p2pBc=m=>{for(const c of P2P.conns)p2pSend(c,m)};
 function p2pExec(op){const p=op.p;
   if(op.t==='set'){const d=jc(op.d);p2pApply(p,d);p2pBc({w:p,d});return 1}
   if(op.t==='update'){if(!P2P.store.has(p))throw new Error('invalid_argument');const d={...P2P.store.get(p),...jc(op.d)};p2pApply(p,d);p2pBc({w:p,d});return 1}
@@ -1414,7 +1415,7 @@ P2P.write=op=>{if(!P2P.peer)return Promise.reject(new Error('Connexion fermée')
   if(P2P.host)try{return Promise.resolve(p2pExec(op))}catch(e){return Promise.reject(e)}
   return new Promise((ok,ko)=>{const id=++P2P.pid;P2P.pend.set(id,{ok,ko});try{P2P.hc.send({id,op})}catch(e){P2P.pend.delete(id);return ko(e)}
     setTimeout(()=>{if(P2P.pend.has(id)){P2P.pend.delete(id);ko(new Error('L\'hôte ne répond pas'))}},10000)})};
-function p2pPeers(){P2P.uids=[NET.uid,...P2P.conns.filter(c=>c.open&&c.uid).map(c=>c.uid)];p2pBc({peers:P2P.uids});if(P2P.peerCb)P2P.peerCb({peers:P2P.uids.map(u=>({presence:{uid:u}}))})}
+function p2pPeers(){P2P.uids=[NET.uid,...P2P.conns.filter(c=>c.uid).map(c=>c.uid)];p2pBc({peers:P2P.uids});if(P2P.peerCb)P2P.peerCb({peers:P2P.uids.map(u=>({presence:{uid:u}}))})}
 P2P.roomCap={join:async()=>({presence(){},onPeers(cb){P2P.peerCb=cb;setTimeout(()=>{if(P2P.host)p2pPeers();else if(P2P.uids.length)cb({peers:P2P.uids.map(u=>({presence:{uid:u}}))})},0);return()=>{P2P.peerCb=null}},leave:async()=>{P2P.peerCb=null}})};
 P2P.hostRoom=function(code,restore){return new Promise((ok,ko)=>{P2P.close();P2P.host=true;P2P.code=code;
   if(restore){try{P2P.store=new Map(JSON.parse(lsGet('ne_p2p_'+code)||'[]'))}catch(e){}}
@@ -1422,11 +1423,11 @@ P2P.hostRoom=function(code,restore){return new Promise((ok,ko)=>{P2P.close();P2P
     const tm=setTimeout(()=>{if(!P2P.ready)ko(new Error('Serveur PeerJS injoignable (réseau ou blocage du site)'))},12000);
     pe.on('open',()=>{clearTimeout(tm);P2P.ready=true;ok()});
     pe.on('error',e=>{if(e.type==='unavailable-id'&&restore&&tries++<6){try{pe.destroy()}catch(x){}setTimeout(start,2500);return}ko(new Error(e.type==='unavailable-id'?'Ce code est déjà utilisé':(e.type||e.message)));});
-    pe.on('connection',c=>{if(P2P.conns.filter(x=>x.open).length>=3){setTimeout(()=>c.close(),300);return}
-      c.on('open',()=>{c.open=true;P2P.conns.push(c)});
-      c.on('data',m=>{if(m.hello){c.uid=m.hello;c.send({sync:[...P2P.store]});p2pPeers();return}
-        if(m.op){try{const res=p2pExec(m.op);c.send({id:m.id,res})}catch(e){c.send({id:m.id,err:e.message})}}});
-      c.on('close',()=>{c.open=false;P2P.conns=P2P.conns.filter(x=>x!==c);p2pPeers()})})};start()})};
+    pe.on('connection',c=>{if(P2P.conns.length>=3){setTimeout(()=>c.close(),300);return}
+      P2P.conns.push(c);
+      c.on('data',m=>{if(m.hello){c.uid=m.hello;p2pSend(c,{sync:[...P2P.store]});p2pPeers();return}
+        if(m.op){try{const res=p2pExec(m.op);const t=m.op.t;p2pSend(c,{id:m.id,res,wp:t==='acquire'?undefined:m.op.p,wd:t==='acquire'?undefined:(P2P.store.get(m.op.p)??null)})}catch(e){p2pSend(c,{id:m.id,err:e.message})}}});
+      const gone=()=>{P2P.conns=P2P.conns.filter(x=>x!==c);p2pPeers()};c.on('close',gone);c.on('error',gone)})};start()})};
 P2P.joinRoom=function(code){return new Promise((ok,ko)=>{P2P.close();P2P.host=false;P2P.code=code;let done=false;const fail=m=>{if(!done){done=true;ko(new Error(m))}};
   netStat('1/3 Connexion au serveur PeerJS…');const pe=P2P.peer=new Peer(undefined,ICE);setTimeout(()=>{if(!pe.id)fail('Serveur PeerJS injoignable (réseau ou blocage du site)')},10000);setTimeout(()=>fail('Connexion directe à l\'hôte impossible (pare-feu/NAT, ou l\'hôte a fermé sa page)'),25000);
   pe.on('error',e=>fail(e.type==='peer-unavailable'?'Salon introuvable : l\'hôte n\'est plus en ligne (annonce périmée)':('Erreur PeerJS : '+(e.type||e.message))));
@@ -1437,7 +1438,7 @@ P2P.joinRoom=function(code){return new Promise((ok,ko)=>{P2P.close();P2P.host=fa
       if(m.sync){netStat('3/3 Salon synchronisé');P2P.store=new Map(m.sync);P2P.ready=true;if(!done){done=true;ok()}return}
       if(m.w!==undefined){p2pApply(m.w,m.d);return}
       if(m.peers){P2P.uids=m.peers;if(P2P.peerCb)P2P.peerCb({peers:m.peers.map(u=>({presence:{uid:u}}))});return}
-      if(m.id&&P2P.pend.has(m.id)){const q=P2P.pend.get(m.id);P2P.pend.delete(m.id);m.err?q.ko(new Error(m.err)):q.ok(m.res)}})})})};
+      if(m.id&&P2P.pend.has(m.id)){if(m.wp!==undefined)p2pApply(m.wp,m.wd);const q=P2P.pend.get(m.id);P2P.pend.delete(m.id);m.err?q.ko(new Error(m.err)):q.ok(m.res)}})})})};
 P2P.close=function(){try{for(const c of P2P.conns)c.close()}catch(e){}try{if(P2P.hc)P2P.hc.close()}catch(e){}try{if(P2P.peer)P2P.peer.destroy()}catch(e){}
   P2P.peer=null;P2P.hc=null;P2P.conns=[];P2P.store=new Map();P2P.ls=[];P2P.pend=new Map();P2P.uids=[];P2P.ready=false;P2P.host=false;P2P.peerCb=null};
 const LOBBY='https://ntfy.sh/neera-lobby-v1';
