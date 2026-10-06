@@ -1062,8 +1062,8 @@ function refresh(){
   if(inMenus()){$('#dock').style.display='none';renderTop();renderRosters();return}
   $('#dock').style.display='grid';renderTop();renderRosters();renderDock()}
 function netChip(){if(!G.online)return'';const d=NET.doc,M=(d&&d.mode)||2,others=[...Array(M).keys()].filter(i=>i!==NET.seat),nOn=others.filter(i=>peerOn(d&&d['id'+i])).length,on=nOn===others.length;
-  return` <span class="netchip">${NET.desync?'<b style="color:#ff6b6b">⚠ Désynchronisation détectée</b> · ':''}${NET.roomCap?`<span class="dotp ${on?'on':''}"></span> ${M===2?'adversaire '+(on?'connecté':'hors ligne'):'joueurs connectés '+(nOn+1)+'/'+M} · `:''}<button class="btn" id="netQuit" style="pointer-events:auto;display:inline-flex;padding:1px 8px;font-size:11px">${NET.quitArm>Date.now()?'Confirmer ?':'Quitter'}</button></span>`}
-function bindQuit(){const q=$('#netQuit');if(q)q.onclick=()=>{if(NET.quitArm>Date.now()){netLeave(true)}else{NET.quitArm=Date.now()+3000;renderTop()}}}
+  return` <span class="netchip">${NET.desync?'<b style="color:#ff6b6b">⚠ Désynchronisation détectée</b> · ':''}${NET.roomCap?`<span class="dotp ${on?'on':''}"></span> ${M===2?'adversaire '+(on?'connecté':'hors ligne'):'joueurs connectés '+(nOn+1)+'/'+M} · `:''}<button class="btn" id="netDiag" style="pointer-events:auto;display:inline-flex;padding:1px 8px;font-size:11px">Diagnostic</button> <button class="btn" id="netQuit" style="pointer-events:auto;display:inline-flex;padding:1px 8px;font-size:11px">${NET.quitArm>Date.now()?'Confirmer ?':'Quitter'}</button></span>`}
+function bindQuit(){const dg=$('#netDiag');if(dg)dg.onclick=showDiag;const q=$('#netQuit');if(q)q.onclick=()=>{if(NET.quitArm>Date.now()){netLeave(true)}else{NET.quitArm=Date.now()+3000;renderTop()}}}
 function renderTop(){
   const b=$('#banner'),h=$('#hint'),pv=b.innerHTML;setTimeout(()=>{if(b.innerHTML!==pv&&pv){b.classList.remove('flash');void b.offsetWidth;b.classList.add('flash')}},0);
   if(inMenus()){b.innerHTML='<b>Sélection des personnages</b>';h.innerHTML='';return}
@@ -1386,7 +1386,7 @@ const netStat=(m,bad)=>{document.querySelectorAll('.nstat').forEach(e=>{e.textCo
 const NLOG=[];const nlog=m=>{NLOG.push(new Date().toISOString().slice(11,19)+' '+m);if(NLOG.length>150)NLOG.shift()};
 addEventListener('error',e=>nlog('ERREUR JS: '+e.message));addEventListener('unhandledrejection',e=>nlog('PROMESSE REJETÉE: '+((e.reason&&e.reason.message)||e.reason)));
 function showDiag(){let b=$('#diagbox');if(b)b.remove();b=document.createElement('div');b.id='diagbox';b.style.cssText='position:fixed;inset:6%;z-index:99;background:#0b0f1a;border:1px solid #3a4a70;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;pointer-events:auto';
-  const head=`version=26 be=${NET.be} seat=${NET.seat} mode=${NET.mode} code=${NET.code} host=${P2P.host} conns=${P2P.conns.length} relayConn=${P2P.conns.some(c=>c.relay)} hcRelay=${!!(P2P.hc&&P2P.hc.relay)} ready=${P2P.ready} Peer=${!!window.Peer} ua=${navigator.userAgent.slice(0,60)}`;
+  const head=`version=28 be=${NET.be} seat=${NET.seat} mode=${NET.mode} code=${NET.code} host=${P2P.host} conns=${P2P.conns.length} relayConn=${P2P.conns.some(c=>c.relay)} hcRelay=${!!(P2P.hc&&P2P.hc.relay)} ready=${P2P.ready} Peer=${!!window.Peer} ua=${navigator.userAgent.slice(0,60)}`;
   b.innerHTML=`<b>Diagnostic de connexion</b><textarea readonly style="flex:1;background:#05070d;color:#cfe;border:1px solid #2a3552;border-radius:6px;padding:8px;font:11px monospace">${esc(head+'\n'+NLOG.join('\n'))}</textarea><div><button class="btn" id="dgCopy">Copier</button> <button class="btn" id="dgClose">Fermer</button></div>`;
   document.body.appendChild(b);$('#dgClose').onclick=()=>b.remove();$('#dgCopy').onclick=()=>{const t=b.querySelector('textarea');t.select();try{document.execCommand('copy');toast('Copié')}catch(e){}}}
 const P2P={peer:null,host:false,code:null,conns:[],hc:null,store:new Map(),ls:[],pend:new Map(),pid:0,leases:new Map(),peerCb:null,uids:[],saveT:0,ready:false};
@@ -1411,9 +1411,9 @@ function p2pApply(p,d){if(d==null)P2P.store.delete(p);else P2P.store.set(p,d);p2
 const p2pSend=(c,m)=>{try{if(c.open)c.send(m);else c.on('open',()=>{try{c.send(m)}catch(e){}})}catch(e){}};
 const p2pBc=m=>{let rl=false;for(const c of P2P.conns){if(c.relay){if(!rl){rl=true;rQueue(RL.dn,{to:'*',m})}}else p2pSend(c,m)}};
 function p2pExec(op){const p=op.p;
-  if(op.t==='set'){const d=jc(op.d);p2pApply(p,d);p2pBc({w:p,d});return 1}
-  if(op.t==='update'){if(!P2P.store.has(p))throw new Error('invalid_argument');const d={...P2P.store.get(p),...jc(op.d)};p2pApply(p,d);p2pBc({w:p,d});return 1}
-  if(op.t==='delete'){p2pApply(p,null);p2pBc({w:p,d:null});return 1}
+  if(op.t==='set'){const d=jc(op.d);p2pBc({w:p,d});p2pApply(p,d);return 1}
+  if(op.t==='update'){if(!P2P.store.has(p))throw new Error('invalid_argument');const d={...P2P.store.get(p),...jc(op.d)};p2pBc({w:p,d});p2pApply(p,d);return 1}
+  if(op.t==='delete'){p2pBc({w:p,d:null});p2pApply(p,null);return 1}
   if(op.t==='acquire'){const l=P2P.leases.get(p);if(l&&l.exp>Date.now()&&l.h!==op.h)return{acquired:false};P2P.leases.set(p,{h:op.h,exp:Date.now()+op.ttl});return{acquired:true}}}
 P2P.write=op=>{nlog((P2P.host?'écrit ':'→ hôte ')+op.t+' '+op.p.split('/').slice(2).join('/'));if(!P2P.peer)return Promise.reject(new Error('Connexion fermée'));
   if(P2P.host)try{return Promise.resolve(p2pExec(op))}catch(e){return Promise.reject(e)}
@@ -1439,7 +1439,7 @@ function rRelayConn(uid,dn){return{relay:true,uid,open:true,on(){},close(){},sen
     parts.forEach((pt,i)=>rQueue(dn,{to:uid,m:{sync:pt,sid,i,last:i===parts.length-1}}))}
   else rQueue(dn,{to:uid,m})}}}
 function hostData(c,m){nlog('← '+(c.relay?'relais ':'direct ')+(m.hello?'hello '+m.hello.slice(-6):m.op?'op '+m.op.t+' '+m.op.p.split('/').slice(2).join('/'):'?'));if(m.hello){c.uid=m.hello;p2pSend(c,{sync:[...P2P.store]});p2pPeers();return}
-  if(m.op){try{const res=p2pExec(m.op);const t=m.op.t;p2pSend(c,{id:m.id,res,wp:t==='acquire'?undefined:m.op.p,wd:t==='acquire'?undefined:(P2P.store.get(m.op.p)??null)})}catch(e){p2pSend(c,{id:m.id,err:e.message})}}}
+  if(m.op){try{const t=m.op.t,res=p2pExec(m.op);p2pSend(c,{id:m.id,res})}catch(e){p2pSend(c,{id:m.id,err:e.message})}}}
 P2P.hostRoom=function(code,restore){return new Promise((ok,ko)=>{P2P.close();P2P.host=true;P2P.code=code;
   if(restore){try{P2P.store=new Map(JSON.parse(lsGet('ne_p2p_'+code)||'[]'))}catch(e){}}
   const T=rTopics(code);RL.dn=T.dn;
@@ -1503,7 +1503,7 @@ async function netInit(){if(NET.cl)return true;
 const netErr=e=>{console.warn('net',e);toast('Erreur réseau : '+((e&&e.message)||e))};
 
 /* ---- journal d'actions ---- */
-function netLog(a){if(!G.online||NET.replaying||!NET.db)return;const n=++NET.seq;
+function netLog(a){if(!G.online||NET.replaying||!NET.db)return;const n=++NET.seq;nlog('journal: envoi action #'+n+' '+a.k);
   NET.db.doc(`rooms/${NET.code}/moves/m${String(n).padStart(6,'0')}`).set({n,t:G.mySeat,a,ts:Date.now()}).catch(netErr)}
 function serTarget(s,tg){switch(s.t){case'enemy':case'ally':return tg.id;case'cell':case'zone':return[tg.c,tg.r];case'line':return tg.dir;case'multi':return tg.map(x=>x.id)}return null}
 function deserTarget(u,s,p){switch(s.t){case'none':return targetsFor(u,s);case'enemy':case'ally':return byId(p);case'cell':return{c:p[0],r:p[1]};
@@ -1529,7 +1529,7 @@ async function netPump(){if(NET.pumping)return;NET.pumping=true;
       G.fast=NET.catchup;await applyNet(m.a);G.fast=false}
     if(NET.catchup&&NET.firstMoves){while(G.busy)await wait(40);NET.catchup=false;G.fast=false;refresh();recalc()}}
   finally{NET.pumping=false}}
-function netMoves(snap){const add=[];for(const ch of snap.docChanges())if(ch.type==='added'){const m=ch.doc.data();if(m&&m.n>NET.seq)add.push(m)}
+function netMoves(snap){nlog('journal: '+snap.docChanges().length+' nouvelle(s) action(s) reçue(s), seq local='+NET.seq);const add=[];for(const ch of snap.docChanges())if(ch.type==='added'){const m=ch.doc.data();if(m&&m.n>NET.seq)add.push(m)}
   add.sort((a,b)=>a.n-b.n);
   if(NET.catchup){for(const m of add)if(!NET.queue.some(q=>q.n===m.n))NET.queue.push(m)}
   else for(const m of add)if(m.t!==NET.seat&&!NET.queue.some(q=>q.n===m.n))NET.queue.push(m);
@@ -1648,7 +1648,7 @@ async function netConfirmPicks(){const t=NET.seat,nums=G.picks[t].map(d=>d.num);
   try{const d=(await NET.db.doc('rooms/'+NET.code).get()).data(),L=seatList(d),taken=[].concat(...L.filter(i=>i!==t).map(i=>d['pk'+i]||[]));
     if(nums.some(n=>taken.includes(n))){toast('Un de tes personnages vient d\'être pris');for(const o of L)if(o!==t)G.picks[o]=pkOf(d,o);G.picks[t]=G.picks[t].filter(c=>!taken.includes(c.num));showPick();return}
     NET.confirmed=true;await NET.db.doc('rooms/'+NET.code).update({['pk'+t]:nums,upd:Date.now()});showWait()}catch(e){NET.confirmed=false;netErr(e)}}
-async function startNetGame(){if(NET.started)return;NET.started=true;lobbyStop();clearInterval(NET.waitIv);NET.waitIv=null;const d=NET.doc;
+async function startNetGame(){if(NET.started)return;NET.started=true;nlog('PARTIE LANCÉE seat='+NET.seat+' seed='+NET.doc.seed);lobbyStop();clearInterval(NET.waitIv);NET.waitIv=null;const d=NET.doc;
   seedRng(d.seed);G.variant=d.variant;G.budget=d.budget;G.defDie=d.defDie||5;G.board=boardOf(d);G.events=d.events!==false;resetGame();G.nid=1;G.online=true;G.bot=false;G.seats=d.mode||2;G.mySeat=NET.seat;G.names=[0,1,2,3].map(i=>d['nm'+i]||'');
   G.picks=[0,1,2,3].map(i=>pkOf(d,i));
   $('#overlay').className='';CAMHOME.yaw=NET.seat%2?Math.PI:0;Object.assign(CAMT,CAMHOME);Object.assign(CAMC,CAMHOME);
